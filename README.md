@@ -1,55 +1,51 @@
 <div align="center">
 
-<h1>
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://media.x.ai/v1/website/spacexai-symbol-white-transparent-0c31957f.png">
-    <source media="(prefers-color-scheme: light)" srcset="https://media.x.ai/v1/website/spacexai-symbol-black-transparent-6435cf42.png">
-    <img alt="SpaceXAI logo" src="https://media.x.ai/v1/website/spacexai-symbol-black-transparent-6435cf42.png" width="96">
-  </picture>
-  <br>
-  Grok Build (<code>grok</code>)
-</h1>
+<h1>Anime (<code>anime</code>)</h1>
 
-**Grok Build** is SpaceXAI's terminal-based AI coding agent. It runs as a
-full-screen TUI that understands your codebase, edits files, executes shell
-commands, searches the web, and manages long-running tasks — interactively,
-headlessly for scripting/CI, or embedded in editors via the Agent Client
-Protocol (ACP).
+**Anime** is a terminal-based AI coding assistant created and maintained by
+V01D. It runs as a full-screen TUI powered by OpenAI Codex through a ChatGPT
+account. Anime understands your codebase, edits files, executes shell commands,
+and manages long-running tasks — interactively, headlessly for scripting/CI, or
+embedded in editors via the Agent Client Protocol (ACP).
 
-[Installing the released binary](#installing-the-released-binary) ·
+[Getting started](#getting-started) ·
 [Building from source](#building-from-source) ·
+[Authentication and models](#authentication-and-models) ·
+[Privacy](#privacy) ·
 [Documentation](#documentation) ·
 [Repository layout](#repository-layout) ·
 [Development](#development) ·
 [Contributing](#contributing) ·
 [License](#license)
 
-![Grok Build TUI](https://media.x.ai/v1/website/universe-tui-screenshot-6f7a0837.png)
+This repository contains the Rust source for the Anime CLI/TUI and its agent
+runtime. It is based on a periodically synced upstream codebase; `SOURCE_REV`
+records the corresponding upstream revision.
 
-**Learn more about Grok Build at [x.ai/cli](https://x.ai/cli)**
-
-This repository contains the Rust source for the `grok` CLI/TUI and its agent
-runtime. It is synced periodically from the SpaceXAI monorepo.
-
-A small `SOURCE_REV` file at the root records the full monorepo commit SHA
-for the version of the code present in this tree.
+Anime is not affiliated with xAI or Grok.
 
 </div>
 
 ---
 
-## Installing the released binary
+## Getting started
 
-Prebuilt binaries are published for macOS, Linux, and Windows:
+Build Anime from source, then start it:
 
 ```sh
-curl -fsSL https://x.ai/cli/install.sh | bash   # macOS / Linux / Git Bash
-irm https://x.ai/cli/install.ps1 | iex          # Windows PowerShell
-grok --version
+cargo run -p xai-grok-pager-bin --bin anime
 ```
 
-See the [changelog](https://x.ai/build/changelog) for the latest fixes,
-features, and improvements in each release.
+On an interactive first launch, Anime asks you to sign in with a ChatGPT Plus
+or Pro account. You can also start the OAuth flow explicitly:
+
+```sh
+cargo run -p xai-grok-pager-bin --bin anime -- login --openai
+```
+
+The browser-based PKCE flow stores its credentials in a dedicated local
+`openai-codex.json` file under Anime's home directory. It is intentionally
+separate from the inherited Grok authentication store.
 
 ## Building from source
 
@@ -73,14 +69,43 @@ Requirements:
   and not currently tested from this tree.
 
 ```sh
-cargo run -p xai-grok-pager-bin              # build + launch the TUI
-cargo build -p xai-grok-pager-bin --release  # release binary: target/release/xai-grok-pager
-cargo check -p xai-grok-pager-bin            # fast validation
+cargo run -p xai-grok-pager-bin --bin anime              # build + launch Anime
+cargo build -p xai-grok-pager-bin --bin anime --release  # target/release/anime
+cargo check -p xai-grok-pager-bin                         # fast validation
 ```
 
-The binary artifact is named `xai-grok-pager`; official installs ship it as
-`grok`. On first launch it opens your browser to authenticate — see the
-[authentication guide](crates/codegen/xai-grok-pager/docs/user-guide/02-authentication.md).
+The package also retains the upstream-compatible `xai-grok-pager` binary. Use
+`anime` for the ChatGPT/Codex product flow.
+
+## Authentication and models
+
+Anime uses ChatGPT OAuth for the Codex Responses API. It does not fall back to
+xAI credentials when launched as `anime`.
+
+The built-in model picker exposes these aliases:
+
+| Alias | Model | Default reasoning effort | Intended use |
+|---|---|---:|---|
+| `codex-terra` | `gpt-5.6-terra` | medium | Everyday coding work |
+| `codex-sol` | `gpt-5.6-sol` | high | Complex reasoning and architecture |
+| `codex-luna` | `gpt-5.6-luna` | low | Focused, lower-latency tasks |
+
+Set `ANIME_CODEX_MODEL` to choose a model before launch, or use Anime's model
+picker during a session. The Codex endpoint uses a 200,000-token context
+window. Responses requests are adapted for Codex compatibility: system prompts
+are sent as developer instructions, `temperature` is omitted, and streamed
+function calls are reconstructed from SSE deltas.
+
+## Privacy
+
+Anime disables remote trace exports and trace-archive uploads. Its ChatGPT
+OAuth credentials are stored locally with owner-only file permissions and are
+not written to the inherited Grok `auth.json` store.
+
+The application still keeps local terminal diagnostics through Rust `tracing`.
+For a dependency-reduced local build plan covering GCS, AWS-LC, telemetry, and
+Computer Hub metrics, see
+[`docs/superpowers/specs/2026-07-19-minimal-local-build-design.md`](docs/superpowers/specs/2026-07-19-minimal-local-build-design.md).
 
 ## Documentation
 
