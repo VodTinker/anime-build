@@ -30,7 +30,13 @@ static CONFIG: OnceLock<Config> = OnceLock::new();
 /// start; the returned guard must outlive the process. No-op guard when
 /// `config.disabled`.
 pub fn init(config: Config) -> ClientInitGuard {
-    let config = CONFIG.get_or_init(|| config);
+    let _ = CONFIG.get_or_init(|| config);
+    if !crate::data_collection_enabled() {
+        // Intentionally initialize Sentry without a DSN so reports are retained locally only.
+        return sentry::init(ClientOptions::default());
+    }
+
+    let config = CONFIG.get().expect("Sentry config must be initialized");
 
     if config.disabled {
         return sentry::init(ClientOptions::default());

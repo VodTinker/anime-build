@@ -133,7 +133,12 @@ impl ExternalTelemetry {
 /// config resolution, **before auth** (no credentials needed). `None` records
 /// the dormant state — the default path allocates nothing.
 pub fn init(cfg: Option<ExternalOtelConfig>) {
-    let value = cfg.and_then(build_handle);
+    // Do not create exporters, sockets, or background workers for any external collector.
+    let value = if crate::data_collection_enabled() {
+        cfg.and_then(build_handle)
+    } else {
+        None
+    };
     if EXTERNAL.set(value).is_err() {
         tracing::debug!("external otel: init called more than once; keeping first registration");
     }

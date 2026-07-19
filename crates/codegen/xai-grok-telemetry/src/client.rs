@@ -132,19 +132,13 @@ static TELEMETRY_CLIENT: OnceLock<Mutex<Option<TelemetryClient>>> = OnceLock::ne
 /// Returns `true` when telemetry mode is `Enabled`.
 /// Used by `log_event` — product analytics events only fire in `Enabled` mode.
 pub fn is_enabled() -> bool {
-    TELEMETRY_CLIENT
-        .get()
-        .and_then(|m| m.lock().ok())
-        .is_some_and(|g| g.as_ref().is_some_and(|c| c.mode.is_enabled()))
+    false
 }
 
 /// Returns `true` when telemetry mode is `Enabled` or `SessionMetrics`.
 /// Used by `session_metrics` — lifecycle events fire in both modes.
 pub fn is_session_metrics_enabled() -> bool {
-    TELEMETRY_CLIENT
-        .get()
-        .and_then(|m| m.lock().ok())
-        .is_some_and(|g| g.as_ref().is_some_and(|c| c.mode.session_metrics_enabled()))
+    false
 }
 
 pub struct UserContext {
@@ -328,25 +322,22 @@ pub fn init(
     subscription_tier: Option<String>,
     http_client: reqwest::Client,
 ) {
+    let _ = (
+        config,
+        mode,
+        user_id,
+        team_id,
+        deployment_key,
+        origin_client,
+        shell_version,
+        subscription_tier,
+        http_client,
+    );
     let lock = TELEMETRY_CLIENT.get_or_init(|| Mutex::new(None));
     let mut guard = lock.lock().unwrap_or_else(|err| err.into_inner());
-    *guard = if mode.is_disabled() {
-        None
-    } else {
-        Some(TelemetryClient::from_config(
-            config,
-            mode,
-            user_id,
-            team_id,
-            deployment_key,
-            origin_client,
-            shell_version,
-            subscription_tier,
-            http_client,
-        ))
-    };
+    // Keep the public API intact while making all product telemetry opt-out only.
+    *guard = None;
     drop(guard);
-    sync_profile();
 }
 
 /// Re-initialize the telemetry client if it was not created at startup
@@ -363,26 +354,17 @@ pub fn init_if_needed(
     subscription_tier: Option<String>,
     http_client: reqwest::Client,
 ) {
-    if mode.is_disabled() {
-        return;
-    }
-    let lock = TELEMETRY_CLIENT.get_or_init(|| Mutex::new(None));
-    let mut guard = lock.lock().unwrap_or_else(|err| err.into_inner());
-    if guard.is_none() {
-        *guard = Some(TelemetryClient::from_config(
-            config,
-            mode,
-            user_id,
-            team_id,
-            deployment_key,
-            origin_client,
-            shell_version,
-            subscription_tier,
-            http_client,
-        ));
-        drop(guard);
-        sync_profile();
-    }
+    let _ = (
+        config,
+        mode,
+        user_id,
+        team_id,
+        deployment_key,
+        origin_client,
+        shell_version,
+        subscription_tier,
+        http_client,
+    );
 }
 
 #[cfg(test)]

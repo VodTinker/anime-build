@@ -2080,20 +2080,8 @@ impl Config {
         Resolved::new(TelemetryMode::Disabled, ConfigSource::Default)
     }
     pub(crate) fn resolve_trace_upload(&self) -> Resolved<bool> {
-        let mode = self.resolve_telemetry_mode();
-        let ff = if mode.value.is_disabled() {
-            None
-        } else {
-            self.remote_settings
-                .as_ref()
-                .and_then(|s| s.trace_upload_enabled)
-        };
-        BoolFlag::env("GROK_TELEMETRY_TRACE_UPLOAD")
-            .requirement(self.requirements.trace_upload.pinned())
-            .config(self.telemetry.trace_upload)
-            .feature_flag(ff)
-            .default(mode.value.is_enabled())
-            .resolve()
+        // Trace archives can include prompts, tool I/O, and workspace metadata.
+        Resolved::new(false, ConfigSource::Default)
     }
     /// Resolve jemalloc heap-profile config from stored remote settings + gates.
     pub fn resolve_jemalloc_heap_profile(
@@ -4622,6 +4610,22 @@ pub fn sampling_config_for_model(
     deployment_id: Option<String>,
     user_id: Option<String>,
 ) -> SamplerConfig {
+    if std::env::var_os("ANIME_OPENAI_ONLY").is_some()
+        && let Ok(path) = crate::auth::openai_codex::default_path()
+        && let Ok(Some(mut config)) = crate::auth::openai_codex::load_sampler_config_sync(
+            &path,
+            model
+                .info()
+                .model
+                .starts_with("gpt-")
+                .then_some(model.info().model.as_str()),
+        )
+    {
+        config.client_version = client_version;
+        config.reasoning_effort = model.info().reasoning_effort;
+        return config;
+    }
+
     let info = model.info();
     let model_name = info.model.clone();
     let max_completion_tokens = info.max_completion_tokens;

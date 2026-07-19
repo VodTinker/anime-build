@@ -39,3 +39,8 @@ pub use session_ctx::{
     EmitterOrigin, TelemetryCtx, emit_event, emit_event_with_origin, log_event, log_session_event,
     log_session_event_with_origin, with_session_ctx,
 };
+
+/// Compile-time privacy policy for this distribution.
+pub fn data_collection_enabled() -> bool {
+    false
+}
