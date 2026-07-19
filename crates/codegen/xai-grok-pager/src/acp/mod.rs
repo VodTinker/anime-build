@@ -579,6 +579,18 @@ pub fn startup_auth_metadata(
     Option<acp::AuthMethodId>,
     AuthStartMode,
 ) {
+    // ChatGPT Codex credentials are intentionally stored outside the xAI
+    // auth manager, so they are not represented in its advertised methods.
+    // Treat a valid local Codex login as satisfying the initial welcome gate.
+    let has_openai_codex_login = xai_grok_shell::auth::openai_codex::default_path()
+        .ok()
+        .and_then(|path| xai_grok_shell::auth::openai_codex::load(&path).ok())
+        .flatten()
+        .is_some();
+    if has_openai_codex_login {
+        return (false, None, None, AuthStartMode::Pending);
+    }
+
     let first_method = auth_methods.first();
     let needs_login = first_method
         .map(|m| AuthMethodKind::from_id(m.id()).needs_interactive_login())

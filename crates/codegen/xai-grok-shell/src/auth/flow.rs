@@ -463,6 +463,12 @@ async fn run_auth_flow_inner(
         "auth: starting auth flow"
     );
 
+    if std::env::var_os("ANIME_OPENAI_ONLY").is_some() {
+        anyhow::bail!(
+            "Anime uses ChatGPT OAuth only. Run `anime` and choose ChatGPT Plus / Pro instead of Grok login."
+        );
+    }
+
     if reauth {
         auth_manager.clear()?;
         // Also remove the legacy accounts.x.ai scope so stale tokens

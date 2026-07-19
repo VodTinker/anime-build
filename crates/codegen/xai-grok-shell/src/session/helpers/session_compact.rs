@@ -471,7 +471,8 @@ pub(crate) async fn generate_session_compact(
                 tools,
                 hosted_tools,
                 model: Some(sampling_config.model.to_owned()),
-                temperature: Some(1.0),
+                // ChatGPT/Codex's Responses endpoint rejects `temperature`.
+                temperature: None,
                 x_grok_conv_id: Some(session_id.to_string()),
                 x_grok_req_id: Some(format!("xai-compact-{}", uuid::Uuid::new_v4())),
                 x_grok_session_id: Some(session_id.to_string()),
@@ -1768,6 +1769,99 @@ mod reasoning_compaction_regression_tests {
         assert!(
             without_tools.get("tool_choice").is_none(),
             "tool_choice without tools is rejected by OpenAI-compat backends"
+        );
+        let _ = shutdown_tx.send(());
+    }
+    /// Codex's ChatGPT Responses endpoint rejects `temperature`; a compaction
+    /// request must omit it even though Chat Completions compaction uses 1.0.
+    #[tokio::test]
+    async fn responses_compaction_omits_temperature() {
+        use std::sync::{Arc, Mutex};
+
+        let captured: Arc<Mutex<Vec<serde_json::Value>>> = Arc::new(Mutex::new(Vec::new()));
+        let cap = captured.clone();
+        let app = Router::new().route(
+            "/v1/responses",
+            post(move |body: axum::Json<serde_json::Value>| {
+                let cap = cap.clone();
+                async move {
+                    cap.lock().unwrap().push(body.0);
+                    let events = stream::iter(vec![
+                        Ok::<_, std::convert::Infallible>(
+                            Event::default().data(
+                                json!({
+                                    "type": "response.output_text.delta",
+                                    "sequence_number": 0,
+                                    "item_id": "item-test",
+                                    "output_index": 0,
+                                    "content_index": 0,
+                                    "delta": "<summary>ok</summary>"
+                                })
+                                .to_string(),
+                            ),
+                        ),
+                        Ok(Event::default().data(
+                            json!({
+                                "type": "response.completed",
+                                "sequence_number": 1,
+                                "response": {
+                                    "id": "resp-test",
+                                    "object": "response",
+                                    "created_at": 0,
+                                    "model": "test-model",
+                                    "status": "completed",
+                                    "output": [],
+                                    "usage": null,
+                                    "error": null,
+                                    "incomplete_details": null
+                                }
+                            })
+                            .to_string(),
+                        )),
+                    ]);
+                    Sse::new(events).keep_alive(KeepAlive::default())
+                }
+            }),
+        );
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
+        tokio::spawn(async move {
+            axum::serve(listener, app)
+                .with_graceful_shutdown(async {
+                    let _ = shutdown_rx.await;
+                })
+                .await
+                .unwrap();
+        });
+
+        let base_url = format!("http://{addr}/v1");
+        let mut config = test_config(&base_url);
+        config.api_backend = ApiBackend::Responses;
+        let client = Client::new(config.clone()).unwrap();
+        let output = generate_session_compact(
+            vec![
+                ConversationItem::system("You are a helpful assistant."),
+                ConversationItem::user("Summarize the conversation so far."),
+            ],
+            vec![],
+            vec![],
+            client,
+            acp::SessionId::new("test-session"),
+            &config,
+            std::time::Duration::from_secs(30),
+            0,
+        )
+        .await
+        .unwrap_or_else(|_| panic!("Responses compaction must succeed"));
+
+        assert_eq!(output.content, "<summary>ok</summary>");
+        let bodies = captured.lock().unwrap();
+        assert_eq!(bodies.len(), 1);
+        assert!(
+            bodies[0].get("temperature").is_none(),
+            "Codex Responses requests reject temperature: {}",
+            bodies[0]
         );
         let _ = shutdown_tx.send(());
     }

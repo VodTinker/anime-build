@@ -27,6 +27,7 @@ mod jemalloc_malloc_conf {
 }
 use anyhow::Result;
 use std::env;
+use std::io::{self, IsTerminal as _, Write as _};
 use std::net::SocketAddr;
 use tokio_util::sync::CancellationToken;
 use xai_grok_pager::app::{
@@ -45,6 +46,40 @@ use xai_grok_shell::leader::{
     ControlPayload, LeaderClient, LeaderEnvUrls, connect_or_spawn, socket_path_for_ws_url,
 };
 use xai_grok_update::{UpdateConfig, auto_update, enforce_minimum_version_or_exit};
+
+async fn prompt_for_initial_login() -> Result<()> {
+    if !io::stdin().is_terminal() || !io::stderr().is_terminal() {
+        return Ok(());
+    }
+
+    let token_path = xai_grok_shell::auth::openai_codex::default_path()?;
+    if xai_grok_shell::auth::openai_codex::load(&token_path)?.is_some() {
+        eprintln!("Checking Codex access...");
+        xai_grok_shell::auth::openai_codex::preflight_default().await?;
+        return Ok(());
+    }
+
+    eprintln!("\nAnime needs an account before starting.");
+    eprintln!("  1. Sign in with ChatGPT Plus / Pro");
+    eprintln!("  q. Quit");
+    loop {
+        eprint!("\nSelect an option: ");
+        io::stderr().flush()?;
+        let mut choice = String::new();
+        io::stdin().read_line(&mut choice)?;
+        match choice.trim() {
+            "1" => {
+                xai_grok_shell::auth::openai_codex::login_default().await?;
+                eprintln!("Checking Codex access...");
+                xai_grok_shell::auth::openai_codex::preflight_default().await?;
+                return Ok(());
+            }
+            "q" | "Q" => anyhow::bail!("Sign in is required to start Anime."),
+            _ => eprintln!("Choose 1 or q."),
+        }
+    }
+}
+
 /// Apply headless args to an existing config, only overriding values that are
 /// explicitly set. This allows environment defaults to be preserved when
 /// specific args are not provided.
@@ -1665,6 +1700,24 @@ fn main() {
 }
 async fn async_main() -> Result<()> {
     let _ = rustls::crypto::ring::default_provider().install_default();
+    if std::env::args_os()
+        .next()
+        .and_then(|path| {
+            std::path::Path::new(&path)
+                .file_name()
+                .map(|name| name == "anime")
+        })
+        .unwrap_or(false)
+    {
+        // The Anime distribution must never fall back to the inherited xAI login.
+        unsafe {
+            std::env::set_var("ANIME_OPENAI_ONLY", "1");
+            std::env::set_var("GROK_SYSTEM_PROMPT_LABEL", "Anime by V01D");
+            // Codex terminal frames differ from the inherited xAI parser.
+            // Avoid spending several minutes on retries while surfacing failures.
+            std::env::set_var("GROK_MAX_RETRIES", "1");
+        }
+    }
     let mut args = PagerArgs::parse_and_apply_cwd()?;
     if let Some(ref mode) = args.compaction_mode {
         unsafe { std::env::set_var("GROK_COMPACTION_MODE", mode) };
@@ -1676,6 +1729,15 @@ async fn async_main() -> Result<()> {
         unsafe {
             std::env::set_var(xai_grok_shell::agent::chat_modes::GROK_CHAT_MODE_ENV, "1");
         }
+    }
+    // Keep commands and non-interactive prompt invocations scriptable. A plain
+    // `anime` launch starts with the account selector instead of the xAI flow.
+    if args.command.is_none()
+        && args.single.is_none()
+        && args.prompt_json.is_none()
+        && args.prompt_file.is_none()
+    {
+        prompt_for_initial_login().await?;
     }
     if let Some(ref socket) = args.leader_socket {
         unsafe { std::env::set_var(xai_grok_shell::leader::LEADER_SOCKET_ENV, socket) };
@@ -1881,10 +1943,16 @@ async fn async_main() -> Result<()> {
                 legacy: _,
                 oauth,
                 device_auth,
+                openai,
                 devbox,
             } => {
                 init_tracing_simple("cli");
                 let _otel_guard = xai_grok_telemetry::otel_layer::otel_guard();
+                if openai {
+                    xai_grok_shell::auth::openai_codex::login_default().await?;
+                    println!();
+                    xai_grok_shell::instrumentation::finalize_and_exit(0);
+                }
                 let config = xai_grok_shell::config::load_effective_config_disk_only()
                     .map_err(|e| anyhow::anyhow!("Failed to load config: {e}"))?;
                 let config = AgentConfig::new_from_toml_cfg(&config)

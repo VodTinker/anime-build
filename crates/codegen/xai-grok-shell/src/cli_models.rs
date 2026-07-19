@@ -26,6 +26,13 @@ impl AuthStatus {
     /// [`crate::agent::auth_method::should_advertise_xai_api_key`] so
     /// `disable_api_key_auth` is honored.
     pub fn resolve(agent_config: &AgentConfig) -> Self {
+        if std::env::var_os("ANIME_OPENAI_ONLY").is_some() {
+            return if crate::auth::openai_codex::is_logged_in() {
+                Self::LoggedIn("chatgpt.com".to_owned())
+            } else {
+                Self::NotAuthenticated
+            };
+        }
         if crate::agent::auth_method::has_xai_api_key_env() {
             return Self::ApiKey;
         }

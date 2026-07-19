@@ -34,6 +34,9 @@ pub enum Command {
             conflicts_with_all = ["oauth"]
         )]
         device_auth: bool,
+        /// Sign in with a ChatGPT Plus or Pro account for Codex models.
+        #[arg(long, conflicts_with_all = ["oauth", "device_auth", "legacy"])]
+        openai: bool,
         /// Authenticate for remote development environments (hidden).
         ///
         /// Field is always present so match arms stay feature-unification-safe

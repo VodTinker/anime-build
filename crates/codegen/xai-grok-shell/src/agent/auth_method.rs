@@ -64,6 +64,9 @@ pub fn should_advertise_xai_api_key<'a, I>(disable_api_key_auth: bool, models: I
 where
     I: IntoIterator<Item = &'a ModelEntry>,
 {
+    if std::env::var_os("ANIME_OPENAI_ONLY").is_some() {
+        return crate::auth::openai_codex::is_logged_in();
+    }
     if disable_api_key_auth {
         return false;
     }

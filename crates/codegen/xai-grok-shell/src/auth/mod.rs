@@ -11,6 +11,9 @@ mod jwt;
 pub(crate) mod manager;
 mod model;
 pub mod oidc;
+/// ChatGPT Plus/Pro Codex OAuth. This intentionally does not use `AuthManager`:
+/// OpenAI credentials must never share xAI's `auth.json` or refresh machinery.
+pub mod openai_codex;
 pub(crate) mod recovery;
 pub(crate) mod refresh;
 pub(crate) mod single_flight;
