@@ -1,18 +1,44 @@
 {
-  "default": "grok-build",
-  "web_search": "grok-4.20-multi-agent",
-  "image_description": "grok-build",
-  "session_summary": "grok-build",
+  "default": "gpt-5.6-terra",
+  "web_search": "gpt-5.6-terra",
+  "image_description": "gpt-5.6-terra",
+  "session_summary": "gpt-5.6-terra",
   "models": [
     {
-      "model": "grok-build",
-      "name": "Grok Build",
-      "description": "Best for advanced coding tasks",
-      "context_window": 500000,
-      "temperature": 0.7,
-      "top_p": 0.95,
+      "id": "codex-terra",
+      "model": "gpt-5.6-terra",
+      "name": "Codex Terra",
+      "description": "Balanced coding model for everyday development",
+      "context_window": 200000,
       "api_backend": "responses",
-      "supported_in_api": false
+      "supported_in_api": false,
+      "reasoning_effort": "medium",
+      "supports_reasoning_effort": true,
+      "reasoning_efforts": ["low", "medium", "high", "xhigh"]
+    },
+    {
+      "id": "codex-sol",
+      "model": "gpt-5.6-sol",
+      "name": "Codex Sol",
+      "description": "Deep reasoning for complex code and architecture",
+      "context_window": 200000,
+      "api_backend": "responses",
+      "supported_in_api": false,
+      "reasoning_effort": "high",
+      "supports_reasoning_effort": true,
+      "reasoning_efforts": ["low", "medium", "high", "xhigh"]
+    },
+    {
+      "id": "codex-luna",
+      "model": "gpt-5.6-luna",
+      "name": "Codex Luna",
+      "description": "Fast reasoning for focused coding tasks",
+      "context_window": 200000,
+      "api_backend": "responses",
+      "supported_in_api": false,
+      "reasoning_effort": "low",
+      "supports_reasoning_effort": true,
+      "reasoning_efforts": ["low", "medium", "high"]
     }
   ]
 }
