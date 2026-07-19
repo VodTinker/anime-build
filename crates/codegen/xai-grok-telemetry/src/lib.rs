@@ -1,10 +1,7 @@
-//! Telemetry engine for Grok Build sessions: product events + Mixpanel emission +
-//! Sentry error reporting + OpenTelemetry tracing + structured unified log.
+//! Local diagnostics for Anime sessions.
 //!
-//! Extracted from `xai-file-utils` per review feedback so telemetry has
-//! its own ownership boundary (see CODEOWNERS) and so downstream consumers
-//! that only want event tracking + inference metrics no longer pull in
-//! Mixpanel/HTTP/identity dependencies.
+//! Structured tracing and local debug logs remain available. Product analytics,
+//! Sentry, Mixpanel, and OTLP exporters are intentionally disabled.
 
 mod appender;
 pub mod client;
@@ -13,6 +10,7 @@ pub mod context;
 pub mod debug_log;
 pub mod enums;
 pub mod events;
+#[path = "external_noop.rs"]
 pub mod external;
 pub mod hooks_log;
 pub mod http;
@@ -20,8 +18,8 @@ pub mod id;
 pub mod instrumentation;
 pub mod memory_log;
 pub mod memory_telemetry;
+#[path = "otel_layer_noop.rs"]
 pub mod otel_layer;
-pub(crate) mod otlp_http;
 pub mod prompt_timing;
 pub(crate) mod redact_common;
 pub mod sampling_log;

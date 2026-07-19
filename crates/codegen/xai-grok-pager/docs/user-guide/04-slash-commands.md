@@ -339,14 +339,6 @@ Generate an image from a text description.
 /imagine a golden sunset over a calm ocean with silhouetted palm trees
 ```
 
-### `/imagine-video <description>`
-
-Generate a video from an image or text description. Plans shots, generates source images, and animates them with `image_to_video`.
-
-```
-/imagine-video a cat playing piano in a jazz club
-```
-
 ---
 
 ## Scheduling

@@ -1077,7 +1077,6 @@ async fn file_toolset_override_e2e_to_finalized_toolset() {
         web_fetch_config: Default::default(),
         lsp: None,
         image_gen_config: xai_grok_tools::implementations::grok_build::image_gen::ImageGenConfig::default(),
-        video_gen_config: xai_grok_tools::implementations::grok_build::video_gen::VideoGenConfig::default(),
         app_builder_deployer_config: xai_grok_tools::implementations::grok_build::deploy_app::AppBuilderDeployerConfig::default(),
         api_key_provider: None,
         auth_provider: None,
@@ -2303,7 +2302,7 @@ async fn auth_type_session_based_no_current_returns_session_token() {
 /// BYOK guard. Users with `xai.api_key` must continue to report `ApiKey`
 /// regardless of live-token state -- BYOK sessions have nothing to refresh,
 /// and reporting `SessionToken` would route through cli-chat-proxy paths
-/// (image_gen / video_gen base_url) that don't apply to BYOK keys.
+/// (image_gen base_url) that does not apply to BYOK keys.
 #[tokio::test(flavor = "current_thread")]
 async fn auth_type_xai_api_key_no_current_returns_api_key() {
     let agent = build_minimal_agent_for_tests();
@@ -2435,67 +2434,6 @@ async fn cached_token_fallthrough_falls_to_grok_com_without_credentials() {
         Some(GROK_COM_METHOD_ID),
         "no API-key creds and no kill switch -> interactive grok.com login",
     );
-}
-/// Verifies the 4-state matrix of `(disable_zdr_incompatible_tools, zdr_video_output_s3)`:
-///
-/// | ZDR flag | S3 config | Result                                      |
-/// |----------|-----------|---------------------------------------------|
-/// | false    | None      | Enabled, no S3 (normal non-ZDR mode)        |
-/// | true     | None      | Disabled (ZDR with no escape hatch)         |
-/// | false    | Some      | Enabled, S3 **not** threaded (non-ZDR)      |
-/// | true     | Some      | Enabled, S3 threaded (ZDR with upload path) |
-#[tokio::test(flavor = "current_thread")]
-async fn prepare_video_gen_config_disabled_when_zdr_flag_set() {
-    use xai_grok_tools::implementations::grok_build::video_gen::{
-        S3AccessCredentials, VideoGenConfig, ZdrVideoOutputS3Config,
-    };
-    fn zdr_s3() -> ZdrVideoOutputS3Config {
-        ZdrVideoOutputS3Config {
-            bucket: "team-videos".into(),
-            endpoint: "https://s3.example.com".into(),
-            region: "us-east-1".into(),
-            key_prefix: "grok-videos/".into(),
-            expires_secs: 900,
-            read_write: S3AccessCredentials {
-                access_key_id: "AKIA...".into(),
-                secret_access_key: "secret".into(),
-            },
-            read_only: None,
-        }
-    }
-    let agent = build_minimal_agent_for_tests();
-    agent.sampling_config.borrow_mut().api_key = Some("test-key".to_string());
-    assert!(matches!(
-        agent.prepare_video_gen_config(),
-        VideoGenConfig::Enabled { .. }
-    ));
-    agent.cfg.borrow_mut().disable_zdr_incompatible_tools = true;
-    assert!(matches!(
-        agent.prepare_video_gen_config(),
-        VideoGenConfig::Disabled
-    ));
-    agent.cfg.borrow_mut().zdr_video_output_s3 = Some(zdr_s3());
-    agent.cfg.borrow_mut().disable_zdr_incompatible_tools = false;
-    let VideoGenConfig::Enabled {
-        zdr_video_output_s3: s3_when_non_zdr,
-        ..
-    } = agent.prepare_video_gen_config()
-    else {
-        panic!("expected Enabled");
-    };
-    assert!(
-        s3_when_non_zdr.is_none(),
-        "S3 config must not be threaded when ZDR flag is off"
-    );
-    agent.cfg.borrow_mut().disable_zdr_incompatible_tools = true;
-    let VideoGenConfig::Enabled {
-        zdr_video_output_s3,
-        ..
-    } = agent.prepare_video_gen_config()
-    else {
-        panic!("expected Enabled");
-    };
-    assert!(zdr_video_output_s3.as_ref().is_some_and(|c| c.is_valid()));
 }
 /// The imagine tier gate fails **open**: with no resolved auth we can't confirm
 /// a restricted personal tier, so the tools stay advertised and un-flagged (the

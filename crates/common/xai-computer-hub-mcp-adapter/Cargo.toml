@@ -5,9 +5,6 @@ version = "0.1.0"
 edition.workspace = true
 description = "Bridge between MCP servers and the xAI Computer Hub, registering MCP-discovered tools as native hub tools."
 
-[features]
-metrics = ["dep:prometheus"]
-
 [dependencies]
 async-trait = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
@@ -15,7 +12,6 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["sync"] }
 tracing = { workspace = true }
-prometheus = { workspace = true, optional = true }
 
 xai-tool-protocol = { workspace = true }
 xai-tool-runtime = { workspace = true }

@@ -572,10 +572,6 @@ pub struct RemoteSettings {
     /// (`grok-imagine-image-quality`). Absent/empty → default model.
     #[serde(default)]
     pub image_gen_model_override: Option<String>,
-    /// When `Some(true)`, enable the `video_gen` tool for session-based auth users.
-    /// When `Some(false)` or absent, the tool is hidden regardless of credentials.
-    #[serde(default)]
-    pub video_gen_enabled: Option<bool>,
     /// When `Some(true)`, enable the process-wide image normalize cache that
     /// amortises decode + integrity-check + re-encode work across SessionActors.
     /// Default: disabled. See `session::normalize_cache`.

@@ -165,8 +165,6 @@ pub fn log_event_dual<T: TelemetryEvent>(internal_enabled: bool, data: T) {
 /// Session lifecycle event (type-safe). Fires in both `Enabled` and
 /// `SessionMetrics` modes. Emits with the [`EmitterOrigin::Shell`] prefix;
 /// workspace-side callers use [`log_session_event_with_origin`].
-/// Unconditionally fans out to the external OTEL stream first (independent
-/// gate; see [`log_event`]).
 pub fn log_session_event<T: TelemetryEvent>(data: T) {
     crate::external::emit(&data);
     if !client::is_session_metrics_enabled() {
@@ -179,13 +177,8 @@ pub fn log_session_event<T: TelemetryEvent>(data: T) {
 /// both `Enabled` and `SessionMetrics` modes; the origin selects the analytics
 /// event-name prefix (`grok-shell-*` vs `grok-workspace-*`).
 ///
-/// Deliberately **no external fan-out** here: workspace-side callers
-/// (`EmitterOrigin::Workspace` — remote sampler / workspace server, a
-/// different process and monitoring audience) invoke this directly, and the
-/// external stream is Shell-origin only. An `external = …` macro arm on a
-/// workspace-only event therefore has no effect (pinned by test in
-/// `external::tests`). If the external stream ever needs workspace events,
-/// the hook moves here behind an explicit `origin == Shell` filter.
+/// Workspace-side callers use this directly to label local diagnostic events
+/// with their origin.
 pub fn log_session_event_with_origin<T: TelemetryEvent>(origin: EmitterOrigin, data: T) {
     if !client::is_session_metrics_enabled() {
         return;

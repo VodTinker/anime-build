@@ -6,7 +6,7 @@
     dead_code
 )]
 //! Local data collection: per-turn event tracking, upload queueing, and
-//! S3-compatible blob storage.
+//! proxy-backed blob storage.
 pub(crate) mod circuit_breaker_observer;
 /// Wrap a raw client with [`xai_grok_auth::AuthRetryMiddleware`] for automatic 401 retry.
 pub fn with_auth_retry(
@@ -20,7 +20,6 @@ pub fn with_auth_retry(
 pub mod events;
 pub mod gcs;
 pub mod queue;
-pub mod s3;
 pub mod storage_client;
 pub mod trace_context;
 pub mod upload_config;

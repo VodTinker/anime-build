@@ -94,7 +94,6 @@ pub struct AgentBuilder {
     web_fetch_config: xai_grok_tools::implementations::grok_build::web_fetch::WebFetchConfig,
     lsp: Option<std::sync::Arc<dyn xai_grok_tools::implementations::lsp::LspBackend>>,
     image_gen_config: xai_grok_tools::implementations::grok_build::image_gen::ImageGenConfig,
-    video_gen_config: xai_grok_tools::implementations::grok_build::video_gen::VideoGenConfig,
     app_builder_deployer_config:
         xai_grok_tools::implementations::grok_build::deploy_app::AppBuilderDeployerConfig,
     write_file_enabled: bool,
@@ -219,7 +218,6 @@ impl AgentBuilder {
             web_fetch_config: Default::default(),
             lsp: None,
             image_gen_config: Default::default(),
-            video_gen_config: Default::default(),
             app_builder_deployer_config: Default::default(),
             write_file_enabled: true,
             subagents_enabled: false,
@@ -464,20 +462,6 @@ impl AgentBuilder {
         self.image_gen_config = config;
         self
     }
-    /// Set the video generation configuration.
-    ///
-    /// When `Enabled`, a `VideoGenClient` is created and injected into
-    /// the ToolBridge's resources and the `video_gen` tool is registered,
-    /// allowing video generation via the xAI Video Generation API with
-    /// session credentials. When `Disabled` (default), the tool is not
-    /// registered.
-    pub fn with_video_gen_config(
-        mut self,
-        config: xai_grok_tools::implementations::grok_build::video_gen::VideoGenConfig,
-    ) -> Self {
-        self.video_gen_config = config;
-        self
-    }
     /// Set the deploy service configuration.
     pub fn with_app_builder_deployer_config(
         mut self,
@@ -495,10 +479,8 @@ impl AgentBuilder {
         self
     }
     /// Set the 401-attribution callback for tool HTTP clients
-    /// (`image_gen`, `video_gen`, `web_search`). When set, a 401
-    /// from any of those tools emits an `auth_401_attribution`
-    /// event with `consumer` of `"ImageGen"` / `"VideoGen.start"` /
-    /// `"VideoGen.poll"` / `"WebSearch"`. Callers should pass the
+    /// (`image_gen`, `web_search`). When set, a 401 from either tool emits an
+    /// `auth_401_attribution` event. Callers should pass the
     /// same `ShellAttribution` instance they wire into
     /// `xai_grok_sampler::SamplerConfig::attribution_callback` so
     /// all 401s share the same `AuthManager` reference and land in
@@ -724,14 +706,6 @@ impl AgentBuilder {
                 tool_config
                     .tools
                     .push((&xai_grok_tools::implementations::grok_build::ImageEditTool).into());
-            }
-            if self.video_gen_config.is_enabled() {
-                tool_config
-                    .tools
-                    .push((&xai_grok_tools::implementations::grok_build::ImageToVideoTool).into());
-                tool_config.tools.push(
-                    (&xai_grok_tools::implementations::grok_build::ReferenceToVideoTool).into(),
-                );
             }
             let has_write_tool = tool_config
                 .tools
@@ -1028,7 +1002,6 @@ impl AgentBuilder {
                 web_fetch_config: self.web_fetch_config,
                 lsp: self.lsp,
                 image_gen_config: self.image_gen_config,
-                video_gen_config: self.video_gen_config,
                 app_builder_deployer_config: self.app_builder_deployer_config,
                 api_key_provider: self.api_key_provider,
                 auth_provider: None,

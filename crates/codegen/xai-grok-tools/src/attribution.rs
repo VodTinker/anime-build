@@ -9,8 +9,6 @@ pub const SENT_BEARER_PREFIX_LEN: usize = 12;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ToolConsumer {
     ImageGen,
-    VideoGenStart,
-    VideoGenPoll,
     WebSearch,
 }
 
@@ -18,8 +16,6 @@ impl ToolConsumer {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::ImageGen => "ImageGen",
-            Self::VideoGenStart => "VideoGen.start",
-            Self::VideoGenPoll => "VideoGen.poll",
             Self::WebSearch => "WebSearch",
         }
     }
@@ -96,8 +92,6 @@ mod tests {
     #[test]
     fn tool_consumer_as_str_stable_identifiers() {
         assert_eq!(ToolConsumer::ImageGen.as_str(), "ImageGen");
-        assert_eq!(ToolConsumer::VideoGenStart.as_str(), "VideoGen.start");
-        assert_eq!(ToolConsumer::VideoGenPoll.as_str(), "VideoGen.poll");
         assert_eq!(ToolConsumer::WebSearch.as_str(), "WebSearch");
     }
 }

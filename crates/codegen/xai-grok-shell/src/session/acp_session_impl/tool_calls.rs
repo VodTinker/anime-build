@@ -1624,21 +1624,6 @@ impl SessionActor {
                 vec![],
                 vec![],
             ),
-            ToolInput::ImageToVideo(i2v) => (
-                format!(
-                    "image-to-video: {}",
-                    i2v.prompt.as_deref().unwrap_or(&i2v.image)
-                ),
-                acp::ToolKind::Other,
-                vec![],
-                vec![],
-            ),
-            ToolInput::ReferenceToVideo(r2v) => (
-                format!("reference-to-video: {}", r2v.prompt),
-                acp::ToolKind::Other,
-                vec![],
-                vec![],
-            ),
             ToolInput::MCPTool(mcp_tool) => (
                 mcp_tool.tool_name.to_owned(),
                 acp::ToolKind::Other,

@@ -77,8 +77,8 @@ fn err(msg: &str) -> Result<ToolRunResult, xai_tool_runtime::ToolError> {
     ))
 }
 
-/// Production-shaped HTTP failure (image_gen / video_gen emit this on
-/// any non-success status). Use for retry tests that should exercise
+/// Production-shaped HTTP failure emitted by image generation on any
+/// non-success status. Use for retry tests that should exercise
 /// the structured status-code path rather than the string fallback.
 fn http_err(status: u16, msg: &str) -> Result<ToolRunResult, xai_tool_runtime::ToolError> {
     Err(
@@ -98,7 +98,7 @@ fn is_auth_tool_error_classification() {
     // (expected, error) — covers every branch + a sample of negatives
     // a careless edit could plausibly break.
     let cases: Vec<(bool, xai_tool_runtime::ToolError)> = vec![
-        // Primary path: image_gen / video_gen now surface 401s as
+        // Image generation surfaces 401s as
         // structured custom errors with status in details; classifier
         // matches the status code, not the rendered string.
         (

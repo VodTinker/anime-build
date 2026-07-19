@@ -2,61 +2,33 @@
 
 ## Goal
 
-Make the default local Rust build omit the GCS/AWS-LC, remote telemetry, and Computer Hub metrics dependency paths while retaining the interactive TUI, local logging, MCP support, authentication, and non-GCS upload paths.
+Keep Anime's local coding workflow while permanently removing cloud-upload and remote-observability dependency trees that make local compilation unnecessarily expensive.
 
-## Scope
+## Included capabilities
 
-The build will be controlled by three opt-in Cargo features:
+- Interactive TUI, ACP, MCP, ChatGPT/Codex OAuth, agents, terminal tools, and normal local files.
+- Image generation and image editing.
+- PDF and PowerPoint reading.
+- Proxy-configured uploads.
+- Local `tracing`, local diagnostics, and Computer Hub's core tool/session functionality.
 
-- `gcs`: enables direct Google Cloud Storage uploads through `gcloud-storage`.
-- `hub-metrics`: enables Prometheus collection and Computer Hub metric donation.
-- `telemetry`: enables product telemetry: Sentry, Mixpanel, OpenTelemetry/OTLP, and remote event emission.
+## Permanently removed capabilities
 
-These features are disabled by default for the local development build. A full build can explicitly enable all three.
+| Area | Removed behavior | Replacement / resulting behavior |
+|---|---|---|
+| Cloud storage | GCS, S3, AWS SDK/auth/signing, direct object uploads | `UploadMethod::Direct` and legacy `UploadMethod::S3` return a clear error directing users to proxy upload. |
+| Video | Video generation and image-to-video/reference-video tools | Image generation and editing remain available. |
+| Remote telemetry | Sentry, Mixpanel, OTLP exporters, external event streams, remote trace propagation | Compatible no-op lifecycle APIs; local tracing remains. |
+| Computer Hub donation | Trace, log, and Prometheus metric donation | Hub connections, auth, MCP bridge, handlers, and local harness remain. |
 
-## Architecture
+No feature re-enables these removed paths. This is deliberately a smaller local product, not a feature-gated full distribution.
 
-### GCS
+## Cargo performance policy
 
-`xai-file-utils` will make `gcloud-storage` optional behind a `gcs` feature. The direct GCS branches in `gcs.rs` will be conditionally compiled. Without that feature, choosing `UploadMethod::Direct` will return a deterministic error explaining that direct GCS support was omitted and how to enable it.
+The development profile remains incremental and uses many codegen units; it must not enable dev LTO or reduce codegen units. Linux links through `clang`/`lld`.
 
-Proxy and S3 uploads are unchanged. This removes the `gcloud-storage → gcloud-auth → jsonwebtoken → aws-lc-rs/aws-lc-sys` path from the default dependency graph.
+`.cargo/config.toml` uses `scripts/cargo-rustc-wrapper`. When `sccache` is installed, the wrapper provides a local compiler cache across clean target directories and branch switches; without it, it invokes `rustc` normally. No shared or remote cache is required.
 
-### Computer Hub Metrics
+## Verification
 
-`xai-grok-workspace` will stop enabling the SDK `metrics` feature by default. A `hub-metrics` feature will propagate to `xai-computer-hub-sdk/metrics` and any adapter metrics feature. Metric donation setup will be conditionally compiled or return no reporter when disabled.
-
-Computer Hub connections, authentication, MCP bridging, tool handlers, and local tool harnesses remain enabled.
-
-### Telemetry
-
-Remote telemetry will be feature-gated at the integration boundary. The binary will always initialize local `tracing` output, but will only initialize Sentry, OTLP exporters, telemetry-specific layers, and remote event flushes with `telemetry` enabled.
-
-Crates that require lightweight telemetry symbols for local instrumentation must receive compatible no-op implementations when telemetry is disabled. The no-op surface preserves existing call sites and types where possible, avoids network clients and exporter dependencies, and does not transmit product analytics, crash reports, traces, logs, or metrics.
-
-## Functional Behavior
-
-| Build mode | GCS direct upload | Proxy/S3 upload | Computer Hub core | Hub metrics | Remote telemetry | Local tracing |
-|---|---|---|---|---|---|---|
-| Default local | Explicit unsupported-feature error | Available | Available | Disabled | Disabled | Available |
-| `--features gcs,hub-metrics,telemetry` | Available | Available | Available | Available | Available | Available |
-
-## Error Handling
-
-When a user invokes a direct GCS operation in a build without `gcs`, the error must name the disabled capability and tell the user to rebuild with `--features gcs`. This is a runtime capability error, not a panic.
-
-No-op telemetry functions must be safe to call before or after tracing initialization, and shutdown/flush functions must be idempotent.
-
-## Testing and Verification
-
-- Add feature-specific tests for the disabled direct-GCS error and preserve proxy/S3 upload tests.
-- Compile the default package graph and assert the dependency inversions no longer find `aws-lc-rs`, `gcloud-storage`, `sentry`, `opentelemetry-otlp`, or `prometheus`.
-- Compile the full feature set to prove production integrations remain buildable.
-- Run focused crate tests and the workspace's relevant binary tests.
-
-## Non-Goals
-
-- Removing Computer Hub itself or redesigning its authentication, MCP bridge, tool handlers, or local tool harness.
-- Removing local `tracing`/`tracing-subscriber` diagnostics.
-- Removing proxy or S3 artifact upload paths.
-- Editing `Cargo.lock` manually.
+Do not edit `Cargo.lock` manually. After source changes, validate the dependency graph and focused packages from a developer machine. The graph must not retain `gcloud-storage`, AWS SDK crates, `sentry`, `xai-mixpanel`, OTLP/OpenTelemetry exporters, or Computer Hub donation modules.

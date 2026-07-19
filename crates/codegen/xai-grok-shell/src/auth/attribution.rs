@@ -123,7 +123,7 @@ impl ShellAttribution {
     /// Tool-side counterpart of [`Self::new`]: returns
     /// `Arc<dyn xai_grok_tools::Auth401AttributionCallback>` for the
     /// `with_attribution_callback(...)` builder on each tool HTTP
-    /// client (`ImageGenClient`, `VideoGenClient`, `WebSearchClient`).
+    /// client (`ImageGenClient`, `WebSearchClient`).
     /// The two callbacks share the same underlying impl and emit the
     /// same `auth_401_attribution` event format -- only the trait
     /// signature differs (`SamplingConsumer` vs. `ToolConsumer`).
@@ -161,20 +161,14 @@ impl Auth401AttributionCallback for ShellAttribution {
     }
 }
 
-/// Tool-side hook: each tool client (image_gen, video_gen, web_search)
-/// in `xai-grok-tools` emits a 401 attribution event through this
-/// trait when its HTTP request returns UNAUTHORIZED. Same shape as
-/// the sampler-side impl above; routes to the same pair of sinks.
-///
-/// `ToolConsumer::VideoGenStart` and `VideoGenPoll` collapse to the
-/// same [`ConsumerKind::VideoGen`] with different op strings so the
-/// gate query can break down video-gen 401s by phase.
+/// Tool-side hook: each tool client (image_gen, web_search) in
+/// `xai-grok-tools` emits a 401 attribution event through this trait when its
+/// HTTP request returns UNAUTHORIZED. Same shape as the sampler-side impl
+/// above; routes to the same pair of sinks.
 impl ToolAuth401AttributionCallback for ShellAttribution {
     fn record_401(&self, consumer: ToolConsumer, sent_bearer_prefix: Option<&str>) {
         let (kind, op) = match consumer {
             ToolConsumer::ImageGen => (ConsumerKind::ImageGen, ""),
-            ToolConsumer::VideoGenStart => (ConsumerKind::VideoGen, "start"),
-            ToolConsumer::VideoGenPoll => (ConsumerKind::VideoGen, "poll"),
             ToolConsumer::WebSearch => (ConsumerKind::WebSearch, ""),
         };
         record_consumer_401(
@@ -213,11 +207,6 @@ pub(crate) enum ConsumerKind {
     /// (`POST /images/generations`). No per-op discriminator;
     /// consumer string is just `"ImageGen"`.
     ImageGen,
-    /// `xai_grok_tools::ToolConsumer::VideoGenStart` and
-    /// `VideoGenPoll` -- Video Generation API. The op string is
-    /// `"start"` (`POST /videos/generations`) or `"poll"`
-    /// (`GET /videos/{request_id}`).
-    VideoGen,
     /// `xai_grok_tools::ToolConsumer::WebSearch` -- web search via
     /// `POST /responses` with a `WebSearch` tool. No per-op
     /// discriminator; consumer string is just `"WebSearch"`.
@@ -234,7 +223,6 @@ impl ConsumerKind {
             Self::SessionRegistryClient => "SessionRegistryClient",
             Self::IdleResumeModelRefresh => "IdleResumeModelRefresh",
             Self::ImageGen => "ImageGen",
-            Self::VideoGen => "VideoGen",
             Self::WebSearch => "WebSearch",
         }
     }
@@ -332,7 +320,7 @@ pub(crate) fn record_auth_401(
     // Sink 2 -- discrete OTel span exported via OTLP
     // (util/otel_layer.rs). Auth 401 attribution schema fields below
     // become OTel span attributes under `attributes.custom.<name>`
-    // per the tracing-opentelemetry bridge; query by span name
+    // per the local tracing subscriber; query by span name
     // `auth_401_attribution` in the configured telemetry backend.
     //
     // Wrapping in a `warn_span!` (vs. plain `tracing::warn!`) ensures
@@ -621,8 +609,6 @@ mod tests {
             ),
             (ConsumerKind::ImageGen, "", "ImageGen"),
             (ConsumerKind::ImageGen, "ignored", "ImageGen"),
-            (ConsumerKind::VideoGen, "start", "VideoGen.start"),
-            (ConsumerKind::VideoGen, "poll", "VideoGen.poll"),
             (ConsumerKind::WebSearch, "", "WebSearch"),
             (ConsumerKind::WebSearch, "ignored", "WebSearch"),
         ];
@@ -666,8 +652,6 @@ mod tests {
 
         let cases = [
             (ToolConsumer::ImageGen, "ImageGen"),
-            (ToolConsumer::VideoGenStart, "VideoGen.start"),
-            (ToolConsumer::VideoGenPoll, "VideoGen.poll"),
             (ToolConsumer::WebSearch, "WebSearch"),
         ];
 
@@ -695,7 +679,7 @@ mod tests {
     /// expected name and field values.
     ///
     /// We intentionally only need `on_new_span` (which the
-    /// tracing-opentelemetry layer uses as its `OTel span_started`
+    /// local tracing layer uses as its `span_started`
     /// hook). `on_close` is not asserted because the test cares about
     /// "did the span exist with these attributes," not its duration.
     mod span_capture {
@@ -774,7 +758,7 @@ mod tests {
 
     /// `record_auth_401` emits a discrete `warn_span!` with name
     /// `"auth_401_attribution"` and the attribution fields as span
-    /// attributes. This is the span the tracing-opentelemetry bridge
+    /// attributes. This is the span the local tracing layer
     /// ships via OTLP export to the configured telemetry backend.
     /// Verifies field names, types, and values match the schema
     /// documented at the top of this module.

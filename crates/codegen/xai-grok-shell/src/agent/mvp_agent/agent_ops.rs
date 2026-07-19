@@ -1237,8 +1237,7 @@ impl MvpAgent {
     /// Whether the current session is a personal grok.com account on a gated
     /// tier (free / X Basic). The Imagine tools stay advertised to the model but
     /// are flagged tier-restricted so they short-circuit at call time with the
-    /// SuperGrok upsell prose (see `ImageGenConfig`/`VideoGenConfig`'s
-    /// `tier_restricted`).
+    /// SuperGrok upsell prose (see `ImageGenConfig`'s `tier_restricted`).
     ///
     /// Fails **open** (returns `false`) whenever we can't positively confirm a
     /// restricted personal tier — no auth yet, BYOK / API-key sessions, team
@@ -1313,47 +1312,6 @@ impl MvpAgent {
     ) -> xai_grok_tools::implementations::grok_build::deploy_app::AppBuilderDeployerConfig {
         use xai_grok_tools::implementations::grok_build::deploy_app::AppBuilderDeployerConfig;
         AppBuilderDeployerConfig::Disabled
-    }
-    /// Build video generation config. Video tools call the xAI API directly.
-    pub(super) fn prepare_video_gen_config(
-        &self,
-    ) -> xai_grok_tools::implementations::grok_build::video_gen::VideoGenConfig {
-        use xai_grok_tools::implementations::grok_build::video_gen::VideoGenConfig;
-        let Some(api_key) = self.sampling_config.borrow().api_key.clone() else {
-            return VideoGenConfig::Disabled;
-        };
-        let tier_restricted = self.is_tier_restricted_capability();
-        let cfg = self.cfg.borrow();
-        let zdr_video_output_s3 = cfg
-            .disable_zdr_incompatible_tools
-            .then(|| cfg.zdr_video_output_s3.clone())
-            .flatten()
-            .filter(|s3| s3.is_valid());
-        if cfg.disable_zdr_incompatible_tools && zdr_video_output_s3.is_none() {
-            tracing::info!("video_gen disabled by tools.disable_zdr_incompatible_tools");
-            return VideoGenConfig::Disabled;
-        }
-        let base_url = cfg.endpoints.xai_api_base_url.clone();
-        let version = cfg
-            .client_version
-            .clone()
-            .unwrap_or_else(|| xai_grok_version::VERSION.to_string());
-        let alpha_test_key = cfg.endpoints.alpha_test_key.clone();
-        let mut headers = indexmap::IndexMap::new();
-        headers.insert("user-agent".to_string(), format!("xai-grok-build/{version}"));
-        inject_proxy_headers(
-            &mut headers,
-            cfg.client_version.as_deref(),
-            alpha_test_key.as_deref(),
-            &base_url,
-        );
-        VideoGenConfig::Enabled {
-            api_key,
-            base_url,
-            extra_headers: headers,
-            zdr_video_output_s3: zdr_video_output_s3.map(Box::new),
-            tier_restricted,
-        }
     }
     pub(super) fn prepare_web_search_sampling_config(&self) -> Option<SamplingConfig> {
         let model_id = self.cfg.borrow().web_search_model.clone();
@@ -2211,30 +2169,20 @@ impl MvpAgent {
                 cfg.endpoints.clone(),
             )
         };
-        let service_account_key = crate::util::config::load_gcs_service_account_key_sync();
-        let method = if let Some(method) = direct_method {
-            Some(method)
+        // Direct-cloud methods are never resolved in Anime. Only proxy uploads
+        // can be selected after authenticating the local user or deployment.
+        let _ = direct_method;
+        let auth_token = if has_deployment_key {
+            None
         } else {
-            let auth_token = if has_deployment_key {
-                None
-            } else {
-                self.auth_manager
-                        .auth()
-                        .await
-                        .ok()
-                        .filter(|auth| auth.is_xai_auth())
-                        .map(|auth| auth.key)
-            };
-            if auth_token.is_some() || has_deployment_key {
-                endpoints.resolve_upload_method(auth_token)
-            } else if service_account_key.is_some() {
-                Some(crate::session::repo_changes::UploadMethod::Direct {
-                    service_account_key,
-                })
-            } else {
-                None
-            }
+            self.auth_manager
+                .auth()
+                .await
+                .ok()
+                .filter(|auth| auth.is_xai_auth())
+                .map(|auth| auth.key)
         };
+        let method = endpoints.resolve_upload_method(auth_token);
         let reason = crate::upload::turn::TraceUploadReason::from_upload_method(&method);
         (method, reason)
     }
@@ -3367,7 +3315,6 @@ impl MvpAgent {
         let origin_client = self.origin_client_info_from_meta(init.meta.as_ref());
         let web_search_sampling_config = self.prepare_web_search_sampling_config();
         let image_gen_config = self.prepare_image_gen_config();
-        let video_gen_config = self.prepare_video_gen_config();
         let app_builder_deployer_config = self.prepare_app_builder_deployer_config();
         let web_fetch_config = self.prepare_web_fetch_config();
         let write_file_enabled = self.cfg.borrow().resolve_write_file().value;
@@ -3599,7 +3546,6 @@ impl MvpAgent {
                     web_search_sampling_config,
                     web_fetch_config,
                     image_gen_config,
-                    video_gen_config,
                     app_builder_deployer_config,
                     write_file_enabled,
                     goal_enabled,

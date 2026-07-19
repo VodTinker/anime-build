@@ -495,12 +495,11 @@ fn parse_esc_ttl(raw: Option<String>) -> Duration {
 /// Current set:
 /// - `usage` — coding credit / billing UI (alias: `/cost`)
 /// - `imagine` — image generation entry point
-/// - `imagine-video` — video generation entry point
 /// - `voice` — voice dictation entry point (the Ctrl+Space / F8 keybinding is
 ///   gated separately in [`crate::app::dispatch::voice`], since it bypasses the
 ///   slash registry)
 pub(crate) const TIER_RESTRICTED_COMMANDS: &[&str] =
-    &["usage", "imagine", "imagine-video", "voice"];
+    &["usage", "imagine", "voice"];
 /// Whether a subscription-tier display name is a tier with restricted
 /// commands: the free tier (no subscription ⇒ `None`, or an explicit
 /// "Free") and X Basic (CCP display name "X Basic"; JWT claim fallback
@@ -6479,8 +6478,8 @@ pub(crate) mod tests {
     /// Make every tier-restricted command visible on the welcome prompt so the
     /// present/absent assertions exercise the deny list, not incidental
     /// fail-closed hiding:
-    /// - `/imagine`, `/imagine-video` are `required_tools()`-gated, so advertise
-    ///   their tools (otherwise the registry fail-closes them).
+    /// - `/imagine` is `required_tools()`-gated, so advertise its tool
+    ///   (otherwise the registry fail-closes it).
     /// - `/voice` is fail-closed hidden until the remote flag turns it on, so
     ///   reveal it via the registry directly. (We drive the prompt's registry
     ///   rather than `apply_voice_mode_enabled`, which also flips a process-global
@@ -6490,7 +6489,7 @@ pub(crate) mod tests {
             .slash_controller
             .registry_mut()
             .set_available_tools(
-                ["image_gen", "image_to_video"]
+                ["image_gen"]
                     .into_iter()
                     .map(str::to_string)
                     .collect(),

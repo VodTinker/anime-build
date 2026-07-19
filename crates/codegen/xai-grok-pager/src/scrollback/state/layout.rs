@@ -1964,7 +1964,7 @@ mod tests {
     }
 
     #[test]
-    fn ffmpeg_install_midsession_expands_video_reservation() {
+    fn ffmpeg_install_midsession_expands_media_reservation() {
         use crate::inline_media_ffmpeg::set_ffmpeg_available_for_test;
         use crate::scrollback::block::RenderBlock;
         use crate::scrollback::blocks::{OtherToolCallBlock, ToolCallBlock};
@@ -1980,7 +1980,7 @@ mod tests {
 
         let mut state = ScrollbackState::new();
         state.push_block(RenderBlock::ToolCall(ToolCallBlock::Other(
-            OtherToolCallBlock::new("image_to_video", "clip").with_media_ref(path.clone(), true),
+            OtherToolCallBlock::new("media_tool", "clip").with_media_ref(path.clone(), true),
         )));
 
         // Without ffmpeg the entry reserves only the compact banner.

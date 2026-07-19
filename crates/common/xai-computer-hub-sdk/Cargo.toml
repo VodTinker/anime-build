@@ -5,9 +5,6 @@ version = "0.1.0"
 edition.workspace = true
 description = "SDK for the xAI Computer Hub: connection pool, transparent reconnect, tool harness, and tool-server runtime."
 
-[features]
-metrics = ["dep:prometheus"]
-
 [dependencies]
 tokio = { workspace = true, features = ["rt", "sync", "time", "macros"] }
 tokio-tungstenite = { workspace = true, features = ["rustls-tls-native-roots"] }
@@ -24,26 +21,16 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 url = { workspace = true }
 http = { workspace = true }
-prometheus = { workspace = true, optional = true }
 reqwest = { workspace = true }
 chrono = { workspace = true }
 parking_lot = { workspace = true }
-
-fastrace = { workspace = true }
-# Trace donation: spans convert via the stock fastrace -> OTel reporter
-# and ship as standard OTLP payloads.
-fastrace-opentelemetry = { workspace = true }
-opentelemetry = { workspace = true }
-opentelemetry_sdk = { workspace = true }
-opentelemetry-proto = { workspace = true }
-prost = { workspace = true }
-base64 = { workspace = true }
+# Local spans are retained for Computer Hub request handling; no exporter is configured.
+fastrace = { workspace = true, features = ["enable"] }
 
 xai-tool-protocol = { workspace = true }
 xai-tool-runtime = { workspace = true }
 xai-tool-types = { workspace = true }
 xai-computer-hub-core = { workspace = true }
-xai-tracing = { workspace = true }
 
 # Integration tests that need heavier backend deps live in a separate sibling crate to keep this dev-dep set minimal.
 [dev-dependencies]

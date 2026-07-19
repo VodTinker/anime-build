@@ -83,7 +83,7 @@ Inputs:
 - `image` (required) - one or more source/reference images as filesystem paths or `data:image/...;base64,...` URLs. Prefer a single clean reference for reliable results.
 - `aspect_ratio` - optional; used for multi-image edits. Single-image edits preserve the input image aspect ratio.
 
-Use to restyle, recolor, add or remove elements, preserve likeness, transfer style, remix, or iterate on a generated result.
+Use to restyle, recolor, add, remove, preserve likeness, transfer style, remix, or iterate on a generated result.
 
 To produce multiple variations, make multiple `image_edit` calls. The tool does not expose `n` or `count` parameters.
 
@@ -94,38 +94,10 @@ Describe, roughly in this order: **subject -> action/pose -> setting -> style ->
 - Be specific and concrete; lead with the most important elements.
 - State what to include rather than what to exclude.
 - Use one coherent scene per prompt.
-- Match `aspect_ratio` to the use case when using `image_gen`: `9:16` for phone/story, `16:9` for banner/video frame, `1:1` for avatar/icon.
+- Match `aspect_ratio` to the use case when using `image_gen`: `9:16` for phone/story, `16:9` for banner, `1:1` for avatar/icon.
 
 ## Real People and References
 
 1. Search the web first to confirm identity, role, relationship, or event, even when it seems obvious.
 2. Use a single strong reference with `image_edit`. A user-uploaded photo is best; otherwise use a high-quality found reference and cite the source. `image_edit` can take more than one reference, but one clean reference is more reliable.
 3. If no suitable reference exists, ask the user to upload one rather than generating from a weak base.
-
-## Video
-
-> The video tools below may not exist - verify they're available before calling them; if they're not, the user cannot do video gen with Imagine.
-
-Video starts from an image - there is no text-to-video tool. Default to `image_to_video`.
-
-**Think in shots.** Build video as a planned sequence of short shots, not one long take:
-
-1. **Plan the story as shots** - break the idea into distinct shots, one beat each.
-2. **Favor frequent, short shots** - prefer more 6s shots over fewer long ones; more cuts keep it dynamic and interesting.
-3. **Create each shot's source image** with `image_gen` (or a multi-image `image_edit` when a shot must combine references), keeping characters and settings consistent (Core Principle 4).
-4. **Animate each shot with `image_to_video`** - the source becomes frame 1.
-
-Use `reference_to_video` only if the user asks for it or a shot genuinely needs multiple references - and even then, prefer composing those references with a multi-image `image_edit` and animating the result with `image_to_video`.
-
-Key behaviors:
-
-- **Prompt-craft:** one short, vivid moment in present tense with a clear camera movement, in 1-2 sentences.
-- **Minimal but interesting:** keep each shot to one clear subject and a single, simple motion or camera move. Avoid complex or multi-action animation (models handle it poorly); make the shot interesting through composition, lighting, and a strong moment, not busy motion.
-- **Complex source image?** An intricate frame (busy geometry, fine detail, heavy reflections) warps when animated. If you must use it, keep the subject fixed and move only the camera (slow push-in, orbit, or parallax), or break it into tighter, simpler shots. For new shots, generate a simpler, animation-friendly base image up front instead of animating a busy one.
-- **`image_to_video` animates from frame 1**, so stage the intended first frame with `image_gen`/`image_edit` first.
-- **Aspect ratio:** set it on the source image (`image_gen` `aspect_ratio`); don't re-crop an existing video.
-- **Duration:** 6s or 10s only (prefer 6s shots); round to the nearest.
-- **Real people:** reference-first - drive the video from a verified reference image; never animate a named person without one.
-- Don't loop the same clip unless asked.
-
-**Assemble shots with FFmpeg** using stream copy so there's no quality loss: `ffmpeg -f concat ... -c copy` - never re-encode. Keep every shot at the same resolution and frame rate so the copy works.

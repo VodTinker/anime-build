@@ -598,8 +598,6 @@ pub fn consumed_completion_ids(output: &ToolOutput) -> Vec<&str> {
         | ToolOutput::SchedulerList(_)
         | ToolOutput::UpdateGoal(_)
         | ToolOutput::ImageGen(_)
-        | ToolOutput::ImageToVideo(_)
-        | ToolOutput::ReferenceToVideo(_)
         | ToolOutput::ImageEdit(_)
         | ToolOutput::Dynamic(_) => {}
     }

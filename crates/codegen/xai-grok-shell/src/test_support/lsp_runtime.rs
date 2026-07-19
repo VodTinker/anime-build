@@ -88,7 +88,6 @@ pub(crate) fn ctx_with_toggle(toggle: HashMap<String, bool>) -> SubagentSpawnCon
         web_search_sampling_config: None,
         web_fetch_config: Default::default(),
         image_gen_config: Default::default(),
-        video_gen_config: Default::default(),
         app_builder_deployer_config: Default::default(),
         write_file_enabled: true,
         goal_enabled: false,

@@ -1,0 +1,9 @@
+#!/usr/bin/env sh
+# Use the local sccache daemon when it is installed; otherwise preserve Cargo's
+# normal rustc invocation. This makes the workspace configuration portable and
+# keeps all cached artifacts on the developer's machine.
+if command -v sccache >/dev/null 2>&1; then
+    exec sccache "$@"
+fi
+
+exec "$@"

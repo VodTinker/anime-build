@@ -300,8 +300,8 @@ pub(crate) use crate::ENV_TEST_LOCK as TOOL_STATE_ENV_LOCK;
 /// [`SessionContextFactory`] for workspace server sessions.
 ///
 /// When constructed with an [`AuthProvider`] and API base URL, gen tools
-/// (image_gen, video_gen) are enabled using the provider's current
-/// OAuth token. Without auth, gen tools default to `Disabled`.
+/// (`image_gen`) is enabled using the provider's current OAuth token. Without
+/// auth, generation tools default to `Disabled`.
 ///
 /// When [`with_tool_state_home`](Self::with_tool_state_home) is set, each
 /// session's [`SessionContext::state_path`] is rooted at
@@ -396,12 +396,11 @@ impl SessionContextFactory for WorkspaceSessionContextFactory {
     ) -> xai_grok_tools::registry::types::SessionContext {
         use xai_grok_tools::implementations::grok_build::deploy_app::AppBuilderDeployerConfig;
         use xai_grok_tools::implementations::grok_build::image_gen::ImageGenConfig;
-        use xai_grok_tools::implementations::grok_build::video_gen::VideoGenConfig;
         use xai_grok_tools::implementations::web_search::WebSearchConfig;
         let fs = Arc::new(xai_grok_tools::computer::local::LocalFs)
             as Arc<dyn xai_grok_tools::computer::types::AsyncFileSystem>;
         let notification_handle = xai_grok_tools::notification::ToolNotificationHandle::noop();
-        let (image_gen_config, video_gen_config, web_search_config, app_builder_deployer_config) =
+        let (image_gen_config, web_search_config, app_builder_deployer_config) =
             if let (Some(auth), Some(url)) = (&self.auth, &self.api_base_url) {
                 let cred = auth.current();
                 match cred {
@@ -417,13 +416,6 @@ impl SessionContextFactory for WorkspaceSessionContextFactory {
                                 model_override: None,
                                 tier_restricted: false,
                             },
-                            VideoGenConfig::Enabled {
-                                api_key: token.clone(),
-                                base_url: url.clone(),
-                                extra_headers: headers.clone(),
-                                zdr_video_output_s3: None,
-                                tier_restricted: false,
-                            },
                             WebSearchConfig::Enabled {
                                 api_key: token,
                                 base_url: url.clone(),
@@ -436,7 +428,6 @@ impl SessionContextFactory for WorkspaceSessionContextFactory {
                     }
                     _ => (
                         ImageGenConfig::default(),
-                        VideoGenConfig::default(),
                         WebSearchConfig::default(),
                         AppBuilderDeployerConfig::default(),
                     ),
@@ -444,7 +435,6 @@ impl SessionContextFactory for WorkspaceSessionContextFactory {
             } else {
                 (
                     ImageGenConfig::default(),
-                    VideoGenConfig::default(),
                     WebSearchConfig::default(),
                     AppBuilderDeployerConfig::default(),
                 )
@@ -465,7 +455,6 @@ impl SessionContextFactory for WorkspaceSessionContextFactory {
             web_fetch_config: build_web_fetch_config(),
             lsp: None,
             image_gen_config,
-            video_gen_config,
             app_builder_deployer_config,
             api_key_provider: None,
             auth_provider: self.auth.clone(),
@@ -581,7 +570,6 @@ pub mod test_support {
                 web_fetch_config: Default::default(),
                 lsp: None,
                 image_gen_config: Default::default(),
-                video_gen_config: Default::default(),
                 app_builder_deployer_config: Default::default(),
                 api_key_provider: None,
                 auth_provider: None,

@@ -36,7 +36,7 @@ use xai_grok_auth::AuthCredentialProvider;
 ///
 /// `proxy_attribution`, `proxy_credentials`, and `proxy_http_client` mirror
 /// the same-named methods on [`StorageConfig`]. They default to `None` so existing
-/// implementors (tests, no-auth direct-mode resolvers) keep compiling without
+/// implementors (tests and compatibility resolvers) keep compiling without
 /// changes; the queue worker calls them on every dispatch and stitches the
 /// returned `Option`s onto the resolved [`TraceExportConfig`] before handing
 /// it to the upload helpers.
@@ -69,9 +69,9 @@ pub trait TraceExportSource: Send + Sync {
     /// attempt used — implementations must resolve `true` immediately when
     /// the current credential already differs, or a rotation landing between
     /// wait slices is missed and retry stalls until the probe interval.
-    /// `None` (the default) means no recovery is possible — static creds,
-    /// S3/direct mode, or IdP-confirmed permanent failure — and the worker
-    /// drops the auth-failed item immediately instead of parking it.
+    /// `None` (the default) means no recovery is possible — static credentials
+    /// or IdP-confirmed permanent failure — and the worker drops the
+    /// auth-failed item immediately instead of parking it.
     fn wait_for_auth_recovery(
         &self,
         failed_bearer: Option<&str>,
@@ -1956,8 +1956,8 @@ const STORAGE_RETRY_POLICY: RetryPolicy = RetryPolicy::client_storage();
 /// Returns `true` if the error indicates an HTTP 401 or 403 response.
 ///
 /// These auth errors will never succeed with the same request — retrying
-/// wastes time and generates log noise. This is the direct-mode (`gcloud-storage`)
-/// string fallback: direct-mode errors are unstructured anyhow messages, so we
+/// wastes time and generates log noise. This applied to the former direct-cloud mode.
+/// Legacy compatibility errors may be unstructured `anyhow` messages, so we
 /// scrape for 401/403. Proxy-mode errors carry a structured `HttpUploadError`
 /// and are classified by status code in `upload_disposition`.
 fn is_non_retryable_error(error: &anyhow::Error) -> bool {
@@ -1969,7 +1969,7 @@ fn is_non_retryable_error(error: &anyhow::Error) -> bool {
 }
 /// Disposition for a failed storage upload. Proxy-mode errors carry a
 /// structured `HttpUploadError` and are classified by the shared
-/// `RetryPolicy`; direct-mode (gcloud) errors are unstructured strings, so
+/// `RetryPolicy`; legacy compatibility errors can be unstructured strings, so
 /// 401/403 are detected by message scraping as a safety net.
 fn upload_disposition(error: &anyhow::Error) -> Disposition {
     if let Some(http) = error.downcast_ref::<HttpUploadError>() {

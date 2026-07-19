@@ -60,9 +60,6 @@ impl ToolKind {
             ToolKind::ExitPlan => "Exit Plan Mode",
             ToolKind::AskUser => "Ask User",
             ToolKind::ImageGen => "Generate Image",
-            ToolKind::VideoGen => "Generate Video",
-            ToolKind::ImageToVideo => "Generate Video",
-            ToolKind::ReferenceToVideo => "Generate Video",
             ToolKind::DeployApp => "Deploy App",
             ToolKind::SearchTool => "Search Tools",
             ToolKind::UseTool => "Use Tool",
@@ -101,9 +98,6 @@ impl ToolKind {
             | ToolKind::Skill
             | ToolKind::Task
             | ToolKind::ImageGen
-            | ToolKind::VideoGen
-            | ToolKind::ImageToVideo
-            | ToolKind::ReferenceToVideo
             | ToolKind::DeployApp
             | ToolKind::SearchTool
             | ToolKind::UseTool

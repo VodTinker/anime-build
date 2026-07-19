@@ -74,6 +74,23 @@ cargo build -p xai-grok-pager-bin --bin anime --release  # target/release/anime
 cargo check -p xai-grok-pager-bin                         # fast validation
 ```
 
+### Faster local rebuilds
+
+The development profile prioritizes iteration speed, and the repository uses a
+small portable wrapper that enables [`sccache`](https://github.com/mozilla/sccache)
+when it is available. It falls back to `rustc` unchanged when it is not, so
+installing it is optional. On Arch Linux:
+
+```sh
+sudo pacman -S sccache
+sccache --show-stats
+```
+
+`sccache` stores compiler results only on the local machine. It is especially
+useful after cleaning `target/` or switching branches; the first build still
+has to compile its dependencies. Avoid workspace-wide commands while iterating:
+target the package you changed instead.
+
 The package also retains the upstream-compatible `xai-grok-pager` binary. Use
 `anime` for the ChatGPT/Codex product flow.
 
@@ -96,15 +113,27 @@ window. Responses requests are adapted for Codex compatibility: system prompts
 are sent as developer instructions, `temperature` is omitted, and streamed
 function calls are reconstructed from SSE deltas.
 
-## Privacy
+## Local-only build and privacy
 
-Anime disables remote trace exports and trace-archive uploads. Its ChatGPT
-OAuth credentials are stored locally with owner-only file permissions and are
-not written to the inherited Grok `auth.json` store.
+Anime is intentionally built for local development. The following features are
+included:
 
-The application still keeps local terminal diagnostics through Rust `tracing`.
-For a dependency-reduced local build plan covering GCS, AWS-LC, telemetry, and
-Computer Hub metrics, see
+- The TUI, MCP and ACP integrations, ChatGPT/Codex OAuth, agents, and terminal
+  tools.
+- Normal local file tools, including PDF and PowerPoint (`.pptx`) reading.
+- Image generation and image editing.
+- Proxy uploads and local diagnostics through Rust `tracing`.
+
+To reduce the build closure and prevent remote diagnostic delivery, this fork
+permanently excludes GCS, S3/AWS, AWS-LC, video generation, Sentry, Mixpanel,
+OTLP/OpenTelemetry exporters, distributed trace propagation, and Computer Hub
+trace/log/Prometheus-metric donation. Legacy direct-cloud upload configuration
+is kept only for compatibility and reports an error that instructs users to
+configure proxy uploads instead.
+
+ChatGPT OAuth credentials are stored locally with owner-only file permissions
+and are not written to the inherited Grok `auth.json` store. For the technical
+scope of the dependency-reduced build, see
 [`docs/superpowers/specs/2026-07-19-minimal-local-build-design.md`](docs/superpowers/specs/2026-07-19-minimal-local-build-design.md).
 
 ## Documentation

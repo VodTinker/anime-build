@@ -55,8 +55,8 @@ impl From<serde_json::Value> for DynamicOutput {
         Self { value }
     }
 }
-/// Typed saved path for the media tools (`image_gen` / `video_gen` /
-/// `image_edit`), so consumers read it directly instead of scraping the prose.
+/// Typed saved path for the image tools (`image_gen` / `image_edit`), so
+/// consumers read it directly instead of scraping the prose.
 /// A struct (not a bare `PathBuf`) is required: `ToolOutput` is internally
 /// tagged and only accepts map payloads.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -656,10 +656,6 @@ pub enum ToolOutput {
     #[from(skip)]
     ImageGen(MediaGenOutput),
     #[from(skip)]
-    ImageToVideo(MediaGenOutput),
-    #[from(skip)]
-    ReferenceToVideo(MediaGenOutput),
-    #[from(skip)]
     ImageEdit(MediaGenOutput),
 }
 impl ToolOutput {
@@ -978,8 +974,6 @@ impl ToolOutput {
             ToolOutput::Dynamic(v) => serde_json::to_string_pretty(&v.value).unwrap_or_default(),
             ToolOutput::Text(text) => text.text.clone(),
             ToolOutput::ImageGen(m) => m.prompt_text("Image generated"),
-            ToolOutput::ImageToVideo(m) => m.prompt_text("Video generated"),
-            ToolOutput::ReferenceToVideo(m) => m.prompt_text("Video generated"),
             ToolOutput::ImageEdit(m) => m.prompt_text("Image edited"),
         }
     }
@@ -1331,22 +1325,6 @@ mod tests {
                 "Image generated and saved to /tmp/images/1.jpg. Do not read or re-display it, and do not describe how it appears to the user.",
             ),
             (
-                ToolOutput::ImageToVideo(MediaGenOutput::new("/tmp/videos/2.mp4".into())),
-                "ImageToVideo",
-                "/tmp/videos/2.mp4",
-                "2.mp4",
-                "videos",
-                "Video generated and saved to /tmp/videos/2.mp4. Do not read or re-display it, and do not describe how it appears to the user.",
-            ),
-            (
-                ToolOutput::ReferenceToVideo(MediaGenOutput::new("/tmp/videos/3.mp4".into())),
-                "ReferenceToVideo",
-                "/tmp/videos/3.mp4",
-                "3.mp4",
-                "videos",
-                "Video generated and saved to /tmp/videos/3.mp4. Do not read or re-display it, and do not describe how it appears to the user.",
-            ),
-            (
                 ToolOutput::ImageEdit(MediaGenOutput::new("/tmp/images/2.jpg".into())),
                 "ImageEdit",
                 "/tmp/images/2.jpg",
@@ -1367,10 +1345,8 @@ mod tests {
             assert_eq!(json["path"], path);
             assert_eq!(json["filename"], filename);
             assert_eq!(json["session_folder"], session_folder);
-            let (ToolOutput::ImageGen(m)
-            | ToolOutput::ImageToVideo(m)
-            | ToolOutput::ReferenceToVideo(m)
-            | ToolOutput::ImageEdit(m)) = serde_json::from_value(json).unwrap()
+            let (ToolOutput::ImageGen(m) | ToolOutput::ImageEdit(m)) =
+                serde_json::from_value(json).unwrap()
             else {
                 panic!("unexpected variant");
             };
@@ -1378,31 +1354,6 @@ mod tests {
             assert_eq!(m.filename, filename);
             assert_eq!(m.session_folder, session_folder);
         }
-    }
-    #[test]
-    fn media_gen_output_uploaded() {
-        let url = "https://files.example.com/team/video-abc.mp4";
-        let output = ToolOutput::ImageToVideo(MediaGenOutput::uploaded(url.to_string()));
-        let prompt = output.to_prompt_format();
-        assert!(prompt.contains(url), "prompt must include the upload URL");
-        assert!(
-            prompt.contains("not available locally"),
-            "prompt must tell the model the file is remote-only"
-        );
-        assert!(
-            prompt.contains("Do not read or re-display"),
-            "prompt must include re-display guard"
-        );
-        let json = to_json(output);
-        assert_eq!(json["uploaded_url"], url);
-        assert!(
-            json.get("path").is_some(),
-            "path field must be present (empty for uploaded)"
-        );
-        let ToolOutput::ImageToVideo(m) = serde_json::from_value(json).unwrap() else {
-            panic!("unexpected variant");
-        };
-        assert_eq!(m, MediaGenOutput::uploaded(url.to_string()));
     }
     #[test]
     fn read_file_not_found_json() {

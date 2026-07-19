@@ -448,66 +448,29 @@ impl EndpointsConfig {
                     .ok()
             })
     }
-    /// Resolve direct-to-bucket upload method from `trace_upload_bucket`.
-    /// Returns `None` if no bucket is configured or scheme is unrecognized.
+    /// Legacy direct-cloud settings are parsed for compatibility only.
+    /// Anime never resolves them to an upload method; configure proxy uploads.
     pub fn resolve_direct_upload_method(
         &self,
     ) -> Option<crate::session::repo_changes::UploadMethod> {
-        let bucket_url = self.trace_upload_bucket.as_deref()?.trim();
-        if bucket_url.is_empty() {
-            return None;
-        }
-        if let Some(bucket_name) = bucket_url
-            .strip_prefix("s3://")
-            .map(|s| s.trim_end_matches('/'))
-        {
-            let region = self
-                .trace_upload_region
-                .clone()
-                .unwrap_or_else(|| "us-east-1".to_owned());
-            return Some(crate::session::repo_changes::UploadMethod::S3 {
-                bucket: bucket_name.to_owned(),
-                region,
-                credentials_file: None,
-                credentials_content: self.resolve_trace_credentials(),
-                endpoint_url: self.trace_upload_endpoint_url.clone(),
-            });
-        }
-        if bucket_url.starts_with("gs://") {
-            return Some(crate::session::repo_changes::UploadMethod::Direct {
-                service_account_key: self.resolve_trace_credentials(),
-            });
-        }
-        tracing::warn!(
-            bucket = % bucket_url,
-            "trace_upload_bucket has unrecognized scheme (expected gs:// or s3://), ignoring"
-        );
         None
     }
-    /// Whether trace upload can authenticate without an interactive login.
+    /// A proxy upload can use a deployment key without interactive login.
     pub fn has_noninteractive_upload_auth(&self) -> bool {
-        self.deployment_key.is_some() || self.resolve_direct_upload_method().is_some()
+        self.deployment_key.is_some()
     }
-    /// Direct bucket → proxy (if `auth_token` or `deployment_key`) → ambient GCS → `None`.
+    /// Resolve proxy uploads only. Direct GCS/S3 and ambient cloud credentials
+    /// are intentionally unavailable in the local-only build.
     pub fn resolve_upload_method(
         &self,
         auth_token: Option<String>,
     ) -> Option<crate::session::repo_changes::UploadMethod> {
-        if let Some(method) = self.resolve_direct_upload_method() {
-            return Some(method);
-        }
         if auth_token.is_some() || self.deployment_key.is_some() {
             return Some(crate::session::repo_changes::UploadMethod::Proxy {
                 proxy_base_url: self.resolve_trace_upload_url(),
                 user_token: auth_token.unwrap_or_default(),
                 deployment_key: self.deployment_key.clone(),
                 alpha_test_key: self.alpha_test_key.clone(),
-            });
-        }
-        let service_account_key = crate::util::config::load_gcs_service_account_key_sync();
-        if service_account_key.is_some() {
-            return Some(crate::session::repo_changes::UploadMethod::Direct {
-                service_account_key,
             });
         }
         None
@@ -614,7 +577,6 @@ pub struct Requirements {
     pub ask_user_question: Constrained<bool>,
     pub image_gen: Constrained<bool>,
     pub image_edit: Constrained<bool>,
-    pub video_gen: Constrained<bool>,
     pub write_file: Constrained<bool>,
     /// Voice dictation (STT). Pin via requirements/managed `[features] voice_mode`.
     pub voice_mode: Constrained<bool>,
@@ -1492,18 +1454,6 @@ pub struct Config {
     /// Resolved by [`crate::config::ToolsConfig::resolve`].
     #[serde(skip)]
     pub respect_gitignore: bool,
-    /// When `true`, `MvpAgent::prepare_video_gen_config` returns
-    /// `VideoGenConfig::Disabled`, dropping `video_gen` (and any
-    /// future ZDR-incompatible tools) from the model's tool set.
-    /// Resolved by [`crate::config::ToolsConfig::resolve`].
-    #[serde(skip)]
-    pub disable_zdr_incompatible_tools: bool,
-    /// S3 config for ZDR video output (presigned upload to team bucket).
-    /// Only used when `disable_zdr_incompatible_tools` is `true` and the
-    /// config is valid. Resolved by [`crate::config::ToolsConfig::resolve`].
-    #[serde(skip)]
-    pub zdr_video_output_s3:
-        Option<xai_grok_tools::implementations::grok_build::video_gen::ZdrVideoOutputS3Config>,
     /// Whether to enrich path-not-found errors with CWD reminders,
     /// "dropped repo folder" correction, and similar-name suggestions.
     /// Default `false`. Enabled via remote settings.
@@ -1769,8 +1719,6 @@ impl Default for Config {
             todo_gate: false,
             laziness_debug_log: None,
             respect_gitignore: false,
-            disable_zdr_incompatible_tools: false,
-            zdr_video_output_s3: None,
             path_not_found_hints: false,
             cli_experimental_memory: false,
             cli_no_memory: false,
@@ -1930,8 +1878,6 @@ impl Config {
             Some(pinned) => pinned,
             None => tools.respect_gitignore,
         };
-        self.disable_zdr_incompatible_tools = tools.disable_zdr_incompatible_tools;
-        self.zdr_video_output_s3 = tools.zdr_video_output_s3;
         let mcps = crate::config::ManagedMcpsConfig::resolve(
             ctx.raw_config,
             ctx.remote_settings,
@@ -2991,103 +2937,27 @@ pub(crate) fn external_otel_master_switch_from(
     }
     table_enabled(effective_config).unwrap_or(false)
 }
-/// Resolve the external OTEL stream configuration at process startup
-/// (env + local config only — remote settings are not yet available when
-/// tracing init runs).
-///
-/// Layering follows `resolve_telemetry_mode`: **requirement > env > config >
-/// remote > default**, where the `[telemetry]` `otel_*` keys from the
-/// effective config (which already includes managed-config layers distributed
-/// by `grok setup`) sit under the env vars, requirements pins are applied on
-/// top, and the remote layer is restrictive-only + asynchronous
-/// ([`apply_external_otel_remote_policy`]).
+/// Remote OTEL export is permanently disabled in Anime.
 pub fn resolve_external_otel_config(
-    client: xai_grok_telemetry::external::config::ExternalClientInfo,
+    _client: xai_grok_telemetry::external::config::ExternalClientInfo,
 ) -> Option<xai_grok_telemetry::external::ExternalOtelConfig> {
-    resolve_external_otel_config_with(
-        crate::config::load_effective_config().ok().as_ref(),
-        xai_grok_config::load_merged_requirements().as_ref(),
-        |name| std::env::var(name).ok(),
-        client,
-        EndpointsConfig::default().internal_otlp_consumed_standard_vars(),
-    )
+    None
 }
-/// Testable core of [`resolve_external_otel_config`]: all inputs injected so
-/// tests don't race on process env / disk.
+
+/// Testable compatibility surface for the removed remote exporter.
 pub(crate) fn resolve_external_otel_config_with(
-    effective_config: Option<&toml::Value>,
-    requirements: Option<&toml::Value>,
-    getenv: impl Fn(&str) -> Option<String>,
-    client: xai_grok_telemetry::external::config::ExternalClientInfo,
-    internal_pipeline_consumed_otel_vars: bool,
+    _effective_config: Option<&toml::Value>,
+    _requirements: Option<&toml::Value>,
+    _getenv: impl Fn(&str) -> Option<String>,
+    _client: xai_grok_telemetry::external::config::ExternalClientInfo,
+    _internal_pipeline_consumed_otel_vars: bool,
 ) -> Option<xai_grok_telemetry::external::ExternalOtelConfig> {
-    let file_cfg: Option<xai_grok_telemetry::external::ExternalOtelFileConfig> = effective_config
-        .and_then(|cfg| cfg.get("telemetry"))
-        .map(|t| xai_grok_telemetry::external::ExternalOtelFileConfig {
-            enabled: t.get("otel_enabled").and_then(toml::Value::as_bool),
-            metrics_exporter: t
-                .get("otel_metrics_exporter")
-                .and_then(toml::Value::as_str)
-                .map(str::to_owned),
-            logs_exporter: t
-                .get("otel_logs_exporter")
-                .and_then(toml::Value::as_str)
-                .map(str::to_owned),
-            endpoint: t
-                .get("otel_endpoint")
-                .and_then(toml::Value::as_str)
-                .map(str::to_owned),
-            protocol: t
-                .get("otel_protocol")
-                .or_else(|| t.get("otel_transport"))
-                .and_then(toml::Value::as_str)
-                .map(str::to_owned),
-            log_user_prompts: t
-                .get("otel_log_user_prompts")
-                .and_then(toml::Value::as_bool),
-            log_tool_details: t
-                .get("otel_log_tool_details")
-                .and_then(toml::Value::as_bool),
-        });
-    let req_get =
-        |key: &str| -> Option<bool> { requirements?.get("telemetry")?.get(key)?.as_bool() };
-    let req_enabled = req_get("otel_enabled");
-    let req_prompts = req_get("otel_log_user_prompts");
-    let req_details = req_get("otel_log_tool_details");
-    let getenv_pinned = |name: &str| -> Option<String> {
-        let pin = match name {
-            xai_grok_telemetry::external::config::ENV_MASTER_SWITCH => req_enabled,
-            "OTEL_LOG_USER_PROMPTS" => req_prompts,
-            "OTEL_LOG_TOOL_DETAILS" => req_details,
-            _ => None,
-        };
-        if let Some(v) = pin {
-            return Some(if v { "1" } else { "0" }.to_owned());
-        }
-        getenv(name)
-    };
-    let mut resolved = xai_grok_telemetry::external::ExternalOtelConfig::resolve_with(
-        getenv_pinned,
-        file_cfg.as_ref(),
-    )?;
-    resolved.client = client;
-    resolved.internal_pipeline_consumed_otel_vars = internal_pipeline_consumed_otel_vars;
-    Some(resolved)
+    None
 }
-/// Apply the restrictive-only remote-settings policy for the external OTEL
-/// stream (fleet kill switch + content-gate lock). Tighten-only by
-/// construction — there is no remote enable direction — so it is safe to
-/// call on every settings refresh.
-pub fn apply_external_otel_remote_policy(settings: Option<&crate::util::config::RemoteSettings>) {
-    let Some(settings) = settings else { return };
-    let policy = xai_grok_telemetry::external::ExternalOtelRemotePolicy {
-        force_disable: settings.external_otel_disabled.unwrap_or(false),
-        lock_content_gates: settings.external_otel_content_gates_locked.unwrap_or(false),
-    };
-    if policy.force_disable || policy.lock_content_gates {
-        xai_grok_telemetry::external::apply_remote_policy(policy);
-    }
-}
+
+/// Remote OTEL policy has no effect because remote OTEL is absent.
+pub fn apply_external_otel_remote_policy(_settings: Option<&crate::util::config::RemoteSettings>) {}
+
 /// Seed free-function remote caches after writing `Config.remote_settings`.
 pub fn apply_remote_settings_side_effects(settings: Option<&crate::util::config::RemoteSettings>) {
     crate::util::config::cache_remote_mcp_startup_timeout_secs(
@@ -4145,9 +4015,6 @@ pub struct Features {
     /// compaction. `None` = defer to remote settings / env / default (`false`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub two_pass_compaction: Option<bool>,
-    /// Video generation tool. `None` = defer to remote settings / env / default (false).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub video_gen: Option<bool>,
     /// `image_gen` Imagine model override. `None`/empty = defer to remote settings
     /// (`image_gen_model_override`) / env / default (`grok-imagine-image-quality`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -8362,7 +8229,7 @@ reasoning_effort = "low"
         assert!(!off.value);
         assert_eq!(off.source, ConfigSource::Remote);
         unsafe { std::env::remove_var("GROK_IMAGE_EDIT") };
-        assert!(with_list(vec!["image_to_video"]).resolve_image_edit().value);
+        assert!(with_list(vec!["image_gen"]).resolve_image_edit().value);
         assert!(Config::default().resolve_image_edit().value);
     }
     /// Clear every env var the goal/companion resolvers read so tests
@@ -9628,199 +9495,6 @@ agent_type = "cursor"
             legacy.resolve_otlp_headers(),
             vec![("legacy".to_string(), "1".to_string())]
         );
-    }
-    fn ext_env(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> + use<> {
-        let map: std::collections::HashMap<String, String> = pairs
-            .iter()
-            .map(|(k, v)| (k.to_string(), v.to_string()))
-            .collect();
-        move |name: &str| map.get(name).cloned()
-    }
-    fn ext_client() -> xai_grok_telemetry::external::config::ExternalClientInfo {
-        xai_grok_telemetry::external::config::ExternalClientInfo::default()
-    }
-    #[test]
-    fn external_otel_default_off_and_double_opt_in() {
-        assert!(
-            resolve_external_otel_config_with(None, None, ext_env(&[]), ext_client(), false)
-                .is_none()
-        );
-        assert!(
-            resolve_external_otel_config_with(
-                None,
-                None,
-                ext_env(&[("GROK_EXTERNAL_OTEL", "1")]),
-                ext_client(),
-                false,
-            )
-            .is_none()
-        );
-        assert!(
-            resolve_external_otel_config_with(
-                None,
-                None,
-                ext_env(&[
-                    ("GROK_EXTERNAL_OTEL", "1"),
-                    ("OTEL_METRICS_EXPORTER", "otlp"),
-                ]),
-                ext_client(),
-                false,
-            )
-            .is_some()
-        );
-    }
-    #[test]
-    fn external_otel_file_table_layered_under_env() {
-        let effective: toml::Value = toml::from_str(
-            r#"
-            [telemetry]
-            otel_enabled = true
-            otel_logs_exporter = "otlp"
-            otel_endpoint = "https://collector.corp.example:4318"
-            otel_protocol = "grpc"
-            "#,
-        )
-        .unwrap();
-        let cfg = resolve_external_otel_config_with(
-            Some(&effective),
-            None,
-            ext_env(&[]),
-            ext_client(),
-            false,
-        )
-        .expect("file table must activate");
-        assert_eq!(cfg.transport.as_protocol_str(), "grpc");
-        assert_eq!(cfg.logs_endpoint, "https://collector.corp.example:4318");
-        let cfg = resolve_external_otel_config_with(
-            Some(&effective),
-            None,
-            ext_env(&[("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf")]),
-            ext_client(),
-            false,
-        )
-        .expect("env protocol must override file protocol");
-        assert_eq!(cfg.transport.as_protocol_str(), "http/protobuf");
-        assert_eq!(
-            cfg.logs_endpoint,
-            "https://collector.corp.example:4318/v1/logs"
-        );
-        assert!(
-            resolve_external_otel_config_with(
-                Some(&effective),
-                None,
-                ext_env(&[("GROK_EXTERNAL_OTEL", "0")]),
-                ext_client(),
-                false,
-            )
-            .is_none()
-        );
-    }
-    #[test]
-    fn external_otel_requirements_pin_wins_over_env() {
-        let req: toml::Value = toml::from_str(
-            r#"
-            [telemetry]
-            otel_enabled = false
-            "#,
-        )
-        .unwrap();
-        assert!(
-            resolve_external_otel_config_with(
-                None,
-                Some(&req),
-                ext_env(&[("GROK_EXTERNAL_OTEL", "1"), ("OTEL_LOGS_EXPORTER", "otlp"),]),
-                ext_client(),
-                false,
-            )
-            .is_none()
-        );
-        let req: toml::Value = toml::from_str(
-            r#"
-            [telemetry]
-            otel_log_user_prompts = false
-            otel_log_tool_details = false
-            "#,
-        )
-        .unwrap();
-        let cfg = resolve_external_otel_config_with(
-            None,
-            Some(&req),
-            ext_env(&[
-                ("GROK_EXTERNAL_OTEL", "1"),
-                ("OTEL_LOGS_EXPORTER", "otlp"),
-                ("OTEL_LOG_USER_PROMPTS", "1"),
-                ("OTEL_LOG_TOOL_DETAILS", "1"),
-            ]),
-            ext_client(),
-            false,
-        )
-        .expect("stream still active; only gates pinned");
-        assert!(!cfg.gates.log_user_prompts, "requirement pin must win");
-        assert!(!cfg.gates.log_tool_details, "requirement pin must win");
-    }
-    /// Regression: an org enable via `[telemetry].otel_enabled`
-    /// (managed config / requirements — no `GROK_EXTERNAL_OTEL` env var) must
-    /// flip the master switch the *internal* pipeline keys off, so legacy
-    /// `OTEL_EXPORTER_OTLP_*` repointing shuts off in lockstep with the
-    /// external stream activating. A desync would point the internally-authed
-    /// firehose at the customer collector while
-    /// `internal_pipeline_consumed_otel_vars` blocks the external stream.
-    #[test]
-    fn external_otel_master_switch_resolves_from_all_layers() {
-        let enabled_table: toml::Value =
-            toml::from_str("[telemetry]\notel_enabled = true").unwrap();
-        let disabled_table: toml::Value =
-            toml::from_str("[telemetry]\notel_enabled = false").unwrap();
-        assert!(external_otel_master_switch_from(
-            None,
-            None,
-            Some(&enabled_table)
-        ));
-        assert!(!external_otel_master_switch_from(None, None, None));
-        assert!(!external_otel_master_switch_from(
-            None,
-            Some(false),
-            Some(&enabled_table)
-        ));
-        assert!(external_otel_master_switch_from(
-            None,
-            Some(true),
-            Some(&disabled_table)
-        ));
-        assert!(!external_otel_master_switch_from(
-            Some(&disabled_table),
-            Some(true),
-            Some(&enabled_table)
-        ));
-        assert!(external_otel_master_switch_from(
-            Some(&enabled_table),
-            Some(false),
-            None
-        ));
-        let cfg = EndpointsConfig {
-            otel_exporter_otlp_traces_endpoint: Some(
-                "https://collector.corp:4318/v1/traces".into(),
-            ),
-            external_otel_master_switch: true,
-            ..internal_otlp_test_config()
-        };
-        assert!(!cfg.internal_otlp_consumed_standard_vars());
-        assert!(
-            !cfg.resolve_otlp_traces_endpoint()
-                .contains("collector.corp")
-        );
-    }
-    #[test]
-    fn external_otel_carries_internal_consumed_flag() {
-        let cfg = resolve_external_otel_config_with(
-            None,
-            None,
-            ext_env(&[("GROK_EXTERNAL_OTEL", "1"), ("OTEL_LOGS_EXPORTER", "otlp")]),
-            ext_client(),
-            true,
-        )
-        .expect("resolution itself still succeeds");
-        assert!(cfg.internal_pipeline_consumed_otel_vars);
     }
     fn empty_config() -> toml::Value {
         toml::Value::Table(toml::map::Map::new())

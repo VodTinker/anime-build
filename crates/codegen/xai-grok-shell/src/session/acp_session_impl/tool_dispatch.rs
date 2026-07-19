@@ -128,8 +128,8 @@ pub(super) fn resolve_session_shell() -> String {
 }
 
 /// Key in `ToolError::details` that carries the HTTP status code.
-/// Used by both error producers (image_gen, video_gen, test helpers) and
-/// the `is_auth_tool_error` classifier to avoid accidental key mismatch.
+/// Used by image-generation error producers and test helpers, and by the
+/// `is_auth_tool_error` classifier to avoid accidental key mismatch.
 pub(crate) const HTTP_STATUS_DETAILS_KEY: &str = "status";
 
 impl SessionActor {

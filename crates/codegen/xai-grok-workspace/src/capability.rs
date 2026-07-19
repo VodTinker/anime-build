@@ -95,9 +95,6 @@ pub(crate) const ALL_TOOL_KINDS: &[ToolKind] = &[
     ToolKind::ExitPlan,
     ToolKind::AskUser,
     ToolKind::ImageGen,
-    ToolKind::VideoGen,
-    ToolKind::ImageToVideo,
-    ToolKind::ReferenceToVideo,
     ToolKind::DeployApp,
     ToolKind::SearchTool,
     ToolKind::UseTool,
@@ -143,8 +140,7 @@ pub(crate) fn kind_allowed(mode: CapabilityMode, kind: ToolKind) -> bool {
         Lsp | ListDir | List => matches!(mode, M::ReadOnly | M::ReadWrite | M::Execute),
 
         // Edit class.
-        Edit | Write | Delete | Move | ImageGen | VideoGen | ImageToVideo | ReferenceToVideo
-        | DeployApp => matches!(mode, M::ReadWrite),
+        Edit | Write | Delete | Move | ImageGen | DeployApp => matches!(mode, M::ReadWrite),
 
         // Bash / shell.
         Execute => matches!(mode, M::Execute),

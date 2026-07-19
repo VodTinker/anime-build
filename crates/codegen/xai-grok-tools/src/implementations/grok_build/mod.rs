@@ -29,7 +29,6 @@ pub mod task;
 pub mod task_output;
 pub mod todo;
 pub mod update_goal;
-pub mod video_gen;
 pub mod web_fetch;
 pub mod web_search;
 pub use ask_user_question::AskUserQuestionTool;
@@ -58,10 +57,5 @@ pub use task::TaskTool;
 pub use task_output::{GetTerminalCommandOutputTool, TaskOutputTool, WaitTasksTool};
 pub use todo::TodoWriteTool;
 pub use update_goal::{UPDATE_GOAL_TOOL_NAME, UpdateGoalTool};
-pub use video_gen::{
-    IMAGE_TO_VIDEO_TOOL_NAME, IMAGINE_VIDEO_COMMAND_NAME, ImageToVideoTool,
-    REFERENCE_TO_VIDEO_TOOL_NAME, ReferenceToVideoTool, imagine_video_instruction,
-    imagine_video_usage_message,
-};
 pub use web_fetch::{WebFetchClient, WebFetchConfig, WebFetchParams, WebFetchTool};
 pub use web_search::WebSearchTool;
