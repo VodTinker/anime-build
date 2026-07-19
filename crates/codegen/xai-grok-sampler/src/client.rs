@@ -86,6 +86,10 @@ impl GrokRequestHeaders<'_> {
 /// includes it, and `rs::Tool` deserialization fails. On failure, we strip
 /// unrecognized tools from the raw JSON and retry.
 ///
+/// Codex may put the event type exclusively in the SSE `event:` field rather
+/// than duplicating it in the JSON payload, so `event_name` is used to restore
+/// a missing `type` discriminator before deserializing.
+///
 /// On `response.completed` / `response.incomplete`, this also rewrites
 /// `response.usage.total_tokens` in place to the live context length
 /// (`context_details.input_tokens + context_details.output_tokens`)
@@ -96,12 +100,20 @@ impl GrokRequestHeaders<'_> {
 /// `ResponseUsage` unchanged so billing telemetry stays correct. When
 /// the API doesn't emit `context_details` (older deployments) `total_tokens`
 /// passes through unchanged.
-fn deserialize_response_event(data: &str) -> Result<rs::ResponseStreamEvent> {
+fn deserialize_response_event(data: &str, event_name: &str) -> Result<rs::ResponseStreamEvent> {
     let mut event = match serde_json::from_str::<rs::ResponseStreamEvent>(data) {
         Ok(event) => event,
         Err(first_err) => {
-            // Try sanitizing: parse as Value, strip unknown tools, retry.
+            // Try normalizing: Codex occasionally omits the in-payload type
+            // discriminator because the SSE event name already carries it.
+            // Then strip unknown tools and retry.
             if let Ok(mut value) = serde_json::from_str::<serde_json::Value>(data) {
+                if let Some(object) = value.as_object_mut()
+                    && !object.contains_key("type")
+                    && (event_name.starts_with("response.") || event_name == "error")
+                {
+                    object.insert("type".into(), event_name.into());
+                }
                 // Strip tools that async_openai's rs::Tool can't deserialize
                 // (e.g., xAI-specific "x_search"). Instead of maintaining a
                 // hardcoded allowlist, try deserializing each tool entry —
@@ -1101,6 +1113,32 @@ impl SamplingClient {
         Ok(())
     }
 
+    /// Codex accepts developer instructions but rejects the `system` role that
+    /// the xAI conversation serializer emits. Keep this compatibility rewrite
+    /// tightly scoped to the ChatGPT Codex endpoint.
+    fn adapt_codex_response_input(&self, request_body: &mut serde_json::Value) {
+        if !self
+            .base_url
+            .starts_with("https://chatgpt.com/backend-api/codex")
+        {
+            return;
+        }
+        let Some(input) = request_body
+            .get_mut("input")
+            .and_then(|value| value.as_array_mut())
+        else {
+            return;
+        };
+        for item in input {
+            let Some(object) = item.as_object_mut() else {
+                continue;
+            };
+            if object.get("role").and_then(serde_json::Value::as_str) == Some("system") {
+                object.insert("role".into(), serde_json::Value::String("developer".into()));
+            }
+        }
+    }
+
     /// Create a response using the Responses API (non-streaming).
     ///
     /// This uses the Responses API format which provides a simpler interface
@@ -1142,6 +1180,7 @@ impl SamplingClient {
         // it in post-serialize. This is the last surviving piece of the
         // old raw_output machinery.
         xai_grok_sampling_types::patch_reasoning_text_types(&mut request_body);
+        self.adapt_codex_response_input(&mut request_body);
         let http_request = grok_headers
             .apply(self.post(self.endpoint("responses")))
             .json(&request_body);
@@ -1287,6 +1326,7 @@ impl SamplingClient {
             }
         }
         xai_grok_sampling_types::patch_reasoning_text_types(&mut request_body);
+        self.adapt_codex_response_input(&mut request_body);
         // Fresh per attempt so signals never leak across retries; `None`
         // (check disabled) sends no header and does no peek work per event.
         let doom_loop = self
@@ -1426,7 +1466,7 @@ impl SamplingClient {
                         } else if let Some(stream_error) = try_parse_stream_error(data) {
                             Some(Some(Err(stream_error)))
                         } else {
-                            Some(Some(deserialize_response_event(data)))
+                            Some(Some(deserialize_response_event(data, &event.event)))
                         }
                     }
                     Err(e) => {
@@ -2596,7 +2636,7 @@ mod tests {
                 }
             }
         }"#;
-        let event = deserialize_response_event(sse).expect("parse");
+        let event = deserialize_response_event(sse, "response.completed").expect("parse");
         let rs::ResponseStreamEvent::ResponseCompleted(e) = event else {
             panic!("expected ResponseCompleted");
         };
@@ -2609,6 +2649,15 @@ mod tests {
         // total_tokens rewritten to ctx.input + ctx.output (5022 + 571).
         // NOT the wire's cumulative total (6714).
         assert_eq!(usage.total_tokens, 5_593);
+
+        // Codex may rely on the SSE event name and omit this JSON field.
+        let codex_sse = sse.replacen("\"type\": \"response.completed\",", "", 1);
+        let event = deserialize_response_event(&codex_sse, "response.completed")
+            .expect("Codex terminal frame parses from SSE event name");
+        assert!(matches!(
+            event,
+            rs::ResponseStreamEvent::ResponseCompleted(_)
+        ));
     }
 
     #[test]
@@ -2634,7 +2683,7 @@ mod tests {
             )
         };
 
-        let event = deserialize_response_event(&make(78)).expect("parse");
+        let event = deserialize_response_event(&make(78), "response.completed").expect("parse");
         let rs::ResponseStreamEvent::ResponseCompleted(e) = event else {
             panic!("expected ResponseCompleted");
         };
@@ -2648,7 +2697,7 @@ mod tests {
         );
 
         // The REST mapper backfills 0 for unbilled requests: no stash.
-        let event = deserialize_response_event(&make(0)).expect("parse");
+        let event = deserialize_response_event(&make(0), "response.completed").expect("parse");
         let rs::ResponseStreamEvent::ResponseCompleted(e) = event else {
             panic!("expected ResponseCompleted");
         };
@@ -2678,7 +2727,7 @@ mod tests {
                 }
             }
         }"#;
-        let event = deserialize_response_event(sse).expect("parse");
+        let event = deserialize_response_event(sse, "response.completed").expect("parse");
         let rs::ResponseStreamEvent::ResponseCompleted(e) = event else {
             panic!("expected ResponseCompleted");
         };
@@ -2715,7 +2764,7 @@ mod tests {
                 }
             }
         }"#;
-        let event = deserialize_response_event(sse).expect("parse");
+        let event = deserialize_response_event(sse, "response.completed").expect("parse");
         let rs::ResponseStreamEvent::ResponseCompleted(e) = event else {
             panic!("expected ResponseCompleted");
         };
@@ -2736,7 +2785,8 @@ mod tests {
             "delta": "hello",
             "logprobs": []
         }"#;
-        let event = deserialize_response_event(sse).expect("non-terminal event parses");
+        let event = deserialize_response_event(sse, "response.output_text.delta")
+            .expect("non-terminal event parses");
         assert!(matches!(
             event,
             rs::ResponseStreamEvent::ResponseOutputTextDelta(_)

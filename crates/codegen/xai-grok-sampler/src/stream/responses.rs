@@ -4,6 +4,7 @@
 //! [`SamplingEvent`]s. Pure: no I/O, no shell coupling.
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use futures_util::StreamExt;
@@ -11,12 +12,19 @@ use futures_util::stream::{BoxStream, Stream};
 
 use xai_grok_sampling_types::{
     ConversationItem, ConversationResponse, ResponseModelMetadata, SamplingError, StopReason,
-    TokenUsage, rs,
+    TokenUsage, ToolCall, rs,
 };
 
 use crate::events::{SamplingChannel, SamplingErrorInfo, SamplingEvent};
 use crate::metrics::InferenceLatencyStats;
 use crate::types::RequestId;
+
+#[derive(Default)]
+struct StreamedFunctionCall {
+    call_id: String,
+    name: String,
+    arguments: String,
+}
 
 /// Returns whether a Responses API event reflects real model progress
 /// rather than a liveness-only heartbeat / status transition.
@@ -120,6 +128,7 @@ pub fn stream_responses<'a>(
         let mut chunk_index: u64 = 0;
         let mut message_chunk_count: u64 = 0;
         let mut first_token_emitted = false;
+        let mut text_acc = String::new();
         let mut reasoning_acc = String::new();
         let mut last_content_chunk_at = Instant::now();
 
@@ -129,6 +138,7 @@ pub fn stream_responses<'a>(
         // look up `output_index` here to find the matching `tool_index`.
         let mut output_to_tool_index: BTreeMap<u32, u32> = BTreeMap::new();
         let mut next_tool_index: u32 = 0;
+        let mut streamed_function_calls: BTreeMap<u32, StreamedFunctionCall> = BTreeMap::new();
 
         let mut stream = raw_stream;
         loop {
@@ -185,6 +195,7 @@ pub fn stream_responses<'a>(
                 ResponseStreamEvent::ResponseOutputTextDelta(text_delta_event) => {
                     let delta = text_delta_event.delta;
                     if !delta.is_empty() {
+                        text_acc.push_str(&delta);
                         if !first_token_emitted {
                             first_token_emitted = true;
                             yield SamplingEvent::FirstToken {
@@ -200,6 +211,16 @@ pub fn stream_responses<'a>(
                             text: delta,
                             chunk_index,
                         };
+                    }
+                }
+
+                ResponseStreamEvent::ResponseOutputTextDone(text_done_event) => {
+                    // Codex can send only the final text frame and leave the
+                    // terminal response's output array empty. Deltas and a
+                    // done frame contain the same text, so use it only when
+                    // no delta has supplied a fallback yet.
+                    if text_acc.is_empty() && !text_done_event.text.is_empty() {
+                        text_acc = text_done_event.text;
                     }
                 }
 
@@ -249,6 +270,14 @@ pub fn stream_responses<'a>(
                         let tool_index = next_tool_index;
                         next_tool_index += 1;
                         output_to_tool_index.insert(added_event.output_index, tool_index);
+                        streamed_function_calls.insert(
+                            added_event.output_index,
+                            StreamedFunctionCall {
+                                call_id: fc.call_id.clone(),
+                                name: fc.name.clone(),
+                                arguments: fc.arguments.clone(),
+                            },
+                        );
 
                         yield SamplingEvent::ToolCallDelta {
                             request_id: request_id.clone(),
@@ -268,6 +297,9 @@ pub fn stream_responses<'a>(
                         && let Some(&tool_index) =
                             output_to_tool_index.get(&args_event.output_index)
                     {
+                        if let Some(tool) = streamed_function_calls.get_mut(&args_event.output_index) {
+                            tool.arguments.push_str(&delta);
+                        }
                         yield SamplingEvent::ToolCallDelta {
                             request_id: request_id.clone(),
                             tool_index,
@@ -275,6 +307,15 @@ pub fn stream_responses<'a>(
                             name: None,
                             arguments_delta: Some(delta),
                         };
+                    }
+                }
+
+                ResponseStreamEvent::ResponseFunctionCallArgumentsDone(args_event) => {
+                    if let Some(tool) = streamed_function_calls.get_mut(&args_event.output_index) {
+                        tool.arguments = args_event.arguments;
+                        if let Some(name) = args_event.name.filter(|name| !name.is_empty()) {
+                            tool.name = name;
+                        }
                     }
                 }
 
@@ -348,6 +389,16 @@ pub fn stream_responses<'a>(
                 // For CustomToolCall this includes x_search results.
                 ResponseStreamEvent::ResponseOutputItemDone(done_event) => {
                     match &done_event.item {
+                        rs::OutputItem::FunctionCall(fc) => {
+                            streamed_function_calls.insert(
+                                done_event.output_index,
+                                StreamedFunctionCall {
+                                    call_id: fc.call_id.clone(),
+                                    name: fc.name.clone(),
+                                    arguments: fc.arguments.clone(),
+                                },
+                            );
+                        }
                         rs::OutputItem::WebSearchCall(ws) => {
                             let result = serde_json::to_value(ws).ok();
                             yield SamplingEvent::BackendToolCallCompleted {
@@ -463,6 +514,39 @@ pub fn stream_responses<'a>(
         // Splice policy lives in `inject_streaming_reasoning_fallback`.
         let mut items = xai_grok_sampling_types::response_to_conversation_items(response);
         xai_grok_sampling_types::inject_streaming_reasoning_fallback(&mut items, reasoning_acc);
+        // Codex can omit output items from its terminal response even after
+        // streaming text and function-call frames. Merge that state into the
+        // canonical trailing assistant so visible text and tool calls stay in
+        // the same ConversationResponse item.
+        let has_streamed_output = !text_acc.is_empty() || !streamed_function_calls.is_empty();
+        if has_streamed_output
+            && !items
+                .iter()
+                .any(|item| matches!(item, ConversationItem::Assistant(_)))
+        {
+            items.push(ConversationItem::assistant(""));
+        }
+        if let Some(assistant) = items.iter_mut().rev().find_map(|item| match item {
+            ConversationItem::Assistant(assistant) => Some(assistant),
+            _ => None,
+        }) {
+            if assistant.content.is_empty() && !text_acc.is_empty() {
+                assistant.content = Arc::from(text_acc);
+            }
+            for streamed in streamed_function_calls.into_values() {
+                if !assistant
+                    .tool_calls
+                    .iter()
+                    .any(|tool| tool.id.as_ref() == streamed.call_id)
+                {
+                    assistant.tool_calls.push(ToolCall {
+                        id: Arc::from(streamed.call_id),
+                        name: streamed.name,
+                        arguments: Arc::from(streamed.arguments),
+                    });
+                }
+            }
+        }
 
         let has_tool_calls = items.iter().any(|i| match i {
             ConversationItem::Assistant(a) => !a.tool_calls.is_empty(),
@@ -653,6 +737,7 @@ mod tests {
         match events.last().unwrap() {
             SamplingEvent::Completed { response, .. } => {
                 assert_eq!(response.stop_reason, Some(StopReason::Stop));
+                assert_eq!(response.assistant_text(), "hello");
             }
             other => panic!("expected Completed, got {other:?}"),
         }
@@ -847,6 +932,17 @@ mod tests {
         assert_eq!(deltas[1].2, None);
         assert_eq!(deltas[1].3.as_deref(), Some("{\"x\":"));
         assert_eq!(deltas[2].3.as_deref(), Some("1}"));
+
+        match evs.last().unwrap() {
+            SamplingEvent::Completed { response, .. } => {
+                assert_eq!(response.stop_reason, Some(StopReason::ToolCalls));
+                assert_eq!(response.tool_calls().len(), 1);
+                assert_eq!(response.tool_calls()[0].id.as_ref(), "call_xyz");
+                assert_eq!(response.tool_calls()[0].name, "do_thing");
+                assert_eq!(response.tool_calls()[0].arguments.as_ref(), "{\"x\":1}");
+            }
+            other => panic!("expected Completed, got {other:?}"),
+        }
     }
 
     #[tokio::test]
