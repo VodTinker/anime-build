@@ -30,6 +30,11 @@ env:
   # Disable incremental compilation for release builds — saves disk and avoids
   # stale artefacts in CI where there is no reuse across runs.
   CARGO_INCREMENTAL: '0'
+  # ── sccache ────────────────────────────────────────────────────────────────
+  # Shared compilation cache backed by the GitHub Actions cache service.
+  # Dramatically speeds up repeat builds by caching compiled crate artifacts.
+  SCCACHE_GHA_ENABLED: 'true'
+  RUSTC_WRAPPER: sccache
 
 jobs:
   # ── Build matrix ────────────────────────────────────────────────────────────
@@ -78,24 +83,29 @@ jobs:
           toolchain: '1.96.0'
           targets: ${{ matrix.target }}
 
-      - name: Cache cargo registry & build
+      # ── sccache (shared compilation cache) ──────────────────────────────────
+      - name: Install sccache
+        uses: mozilla-actions/sccache-action@v0.0.10
+
+      # ── Cargo registry cache ────────────────────────────────────────────────
+      - name: Cache cargo registry & git
         uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
-          key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-${{ matrix.target }}-
+            ${{ runner.os }}-cargo-registry-
 
-      # ── System dependencies (Linux) ──────────────────────────────────────
+      # ── System dependencies (Linux) ────────────────────────────────────────
       - name: Install system deps (Linux x86_64)
         if: matrix.target == 'x86_64-unknown-linux-gnu'
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
-            clang lld \
+            clang lld cmake \
             protobuf-compiler \
             pkg-config libssl-dev
 
@@ -105,25 +115,33 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
             gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
-            clang lld \
+            clang lld cmake \
             protobuf-compiler \
             pkg-config
 
-      # ── System dependencies (macOS) ──────────────────────────────────────
+      # ── System dependencies (macOS) ────────────────────────────────────────
       - name: Install system deps (macOS)
         if: startsWith(matrix.os, 'macos')
         run: |
           brew install protobuf
 
-      # ── DotSlash (needed for bin/protoc fallback) ────────────────────────
+      # ── DotSlash (needed for bin/protoc fallback) ──────────────────────────
       - name: Install DotSlash
-        run: cargo install dotslash --locked
+        uses: facebook/install-dotslash@latest
 
-      # ── Build ────────────────────────────────────────────────────────────
+      # ── Build ──────────────────────────────────────────────────────────────
       - name: Build
         env:
-          # Override linker for aarch64 cross-compilation
+          # ── aarch64 cross-compilation ──
+          # Linker override (config.toml doesn't set one for this target).
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: ${{ matrix.target == 'aarch64-unknown-linux-gnu' && 'aarch64-linux-gnu-gcc' || '' }}
+          # C/C++/AR cross-compilers for -sys crates (aws-lc-sys, ring,
+          # jemalloc, libgit2, sqlite, etc.).
+          CC_aarch64_unknown_linux_gnu: ${{ matrix.target == 'aarch64-unknown-linux-gnu' && 'aarch64-linux-gnu-gcc' || '' }}
+          CXX_aarch64_unknown_linux_gnu: ${{ matrix.target == 'aarch64-unknown-linux-gnu' && 'aarch64-linux-gnu-g++' || '' }}
+          AR_aarch64_unknown_linux_gnu: ${{ matrix.target == 'aarch64-unknown-linux-gnu' && 'aarch64-linux-gnu-ar' || '' }}
+          # Allow pkg-config to work in cross-compilation mode.
+          PKG_CONFIG_ALLOW_CROSS: ${{ matrix.target == 'aarch64-unknown-linux-gnu' && '1' || '' }}
         run: |
           cargo build \
             -p xai-grok-pager-bin \
@@ -132,7 +150,7 @@ jobs:
             --target ${{ matrix.target }} \
             --features release-dist
 
-      # ── Strip & package ──────────────────────────────────────────────────
+      # ── Strip & package ────────────────────────────────────────────────────
       - name: Strip binary
         run: |
           ${{ matrix.strip_cmd }} target/${{ matrix.target }}/release-dist/anime
@@ -151,7 +169,7 @@ jobs:
           path: ${{ matrix.asset }}.tar.gz
           if-no-files-found: error
 
-  # ── GitHub Release ────────────────────────────────────────────────────────
+  # ── GitHub Release ──────────────────────────────────────────────────────────
   release:
     needs: build
     runs-on: ubuntu-latest
