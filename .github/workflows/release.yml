@@ -1,0 +1,221 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Anime — Cross-platform release pipeline
+#
+# Triggered on version tags (v*). Builds release-dist binaries for Linux and
+# macOS (x86_64 + aarch64), packages them as tarballs, and creates a GitHub
+# Release with all assets attached.
+#
+# Windows targets are included as best-effort (see README).
+# ──────────────────────────────────────────────────────────────────────────────
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+  # Allow manual dispatch for testing the pipeline without a tag push.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v0.2.102)'
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  # Disable incremental compilation for release builds — saves disk and avoids
+  # stale artefacts in CI where there is no reuse across runs.
+  CARGO_INCREMENTAL: '0'
+
+jobs:
+  # ── Build matrix ────────────────────────────────────────────────────────────
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ── Linux x86_64 ──
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            asset: anime-linux-x86_64
+            strip_cmd: strip
+            ext: ''
+
+          # ── Linux aarch64 (cross-compiled on x86_64 runner) ──
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            asset: anime-linux-aarch64
+            strip_cmd: aarch64-linux-gnu-strip
+            ext: ''
+
+          # ── macOS x86_64 (Intel) ──
+          - target: x86_64-apple-darwin
+            os: macos-13
+            asset: anime-darwin-x86_64
+            strip_cmd: strip
+            ext: ''
+
+          # ── macOS aarch64 (Apple Silicon) ──
+          - target: aarch64-apple-darwin
+            os: macos-14
+            asset: anime-darwin-aarch64
+            strip_cmd: strip
+            ext: ''
+
+          # ── Windows x86_64 (best-effort) ──
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            asset: anime-windows-x86_64
+            strip_cmd: ''
+            ext: '.exe'
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.96.0'
+          targets: ${{ matrix.target }}
+
+      - name: Cache cargo registry & build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-${{ matrix.target }}-
+
+      # ── System dependencies (Linux) ──────────────────────────────────────
+      - name: Install system deps (Linux x86_64)
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            clang lld \
+            protobuf-compiler \
+            pkg-config libssl-dev
+
+      - name: Install system deps (Linux aarch64 cross)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo dpkg --add-architecture arm64
+          # Add arm64 package sources
+          sudo sed -i 's/^deb /deb [arch=amd64] /' /etc/apt/sources.list.d/*.list 2>/dev/null || true
+          echo "deb [arch=arm64] http://ports.ubuntu.com/ $(lsb_release -cs) main restricted universe multiverse" | sudo tee /etc/apt/sources.list.d/arm64.list
+          echo "deb [arch=arm64] http://ports.ubuntu.com/ $(lsb_release -cs)-updates main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list.d/arm64.list
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
+            clang lld \
+            protobuf-compiler \
+            pkg-config \
+            libssl-dev:arm64
+
+      # ── System dependencies (macOS) ──────────────────────────────────────
+      - name: Install system deps (macOS)
+        if: startsWith(matrix.os, 'macos')
+        run: |
+          brew install protobuf
+
+      # ── System dependencies (Windows) ────────────────────────────────────
+      - name: Install system deps (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          choco install protoc -y
+
+      # ── DotSlash (needed for bin/protoc fallback) ────────────────────────
+      - name: Install DotSlash
+        if: matrix.os != 'windows-latest'
+        run: cargo install dotslash --locked
+
+      # ── Build ────────────────────────────────────────────────────────────
+      - name: Build (Unix)
+        if: matrix.os != 'windows-latest'
+        env:
+          # Override linker for aarch64 cross-compilation
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: ${{ matrix.target == 'aarch64-unknown-linux-gnu' && 'aarch64-linux-gnu-gcc' || '' }}
+        run: |
+          cargo build \
+            -p xai-grok-pager-bin \
+            --bin anime \
+            --profile release-dist \
+            --target ${{ matrix.target }} \
+            --features release-dist
+
+      - name: Build (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          cargo build `
+            -p xai-grok-pager-bin `
+            --bin anime `
+            --profile release-dist `
+            --target ${{ matrix.target }} `
+            --features release-dist
+
+      # ── Strip & package ──────────────────────────────────────────────────
+      - name: Strip binary (Unix)
+        if: matrix.strip_cmd != '' && matrix.os != 'windows-latest'
+        run: |
+          ${{ matrix.strip_cmd }} target/${{ matrix.target }}/release-dist/anime${{ matrix.ext }}
+
+      - name: Package (Unix)
+        if: matrix.os != 'windows-latest'
+        run: |
+          mkdir -p staging
+          cp target/${{ matrix.target }}/release-dist/anime staging/
+          cd staging
+          tar czf ../${{ matrix.asset }}.tar.gz anime
+
+      - name: Package (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path staging -Force
+          Copy-Item "target/${{ matrix.target }}/release-dist/anime.exe" staging/
+          Compress-Archive -Path staging/anime.exe -DestinationPath "${{ matrix.asset }}.zip"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: |
+            ${{ matrix.asset }}.tar.gz
+            ${{ matrix.asset }}.zip
+          if-no-files-found: error
+
+  # ── GitHub Release ────────────────────────────────────────────────────────
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List artifacts
+        run: find artifacts -type f | sort
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          generate_release_notes: true
+          files: |
+            artifacts/anime-linux-x86_64/anime-linux-x86_64.tar.gz
+            artifacts/anime-linux-aarch64/anime-linux-aarch64.tar.gz
+            artifacts/anime-darwin-x86_64/anime-darwin-x86_64.tar.gz
+            artifacts/anime-darwin-aarch64/anime-darwin-aarch64.tar.gz
+            artifacts/anime-windows-x86_64/anime-windows-x86_64.zip
