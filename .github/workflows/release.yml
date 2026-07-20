@@ -109,18 +109,12 @@ jobs:
       - name: Install system deps (Linux aarch64 cross)
         if: matrix.target == 'aarch64-unknown-linux-gnu'
         run: |
-          sudo dpkg --add-architecture arm64
-          # Add arm64 package sources
-          sudo sed -i 's/^deb /deb [arch=amd64] /' /etc/apt/sources.list.d/*.list 2>/dev/null || true
-          echo "deb [arch=arm64] http://ports.ubuntu.com/ $(lsb_release -cs) main restricted universe multiverse" | sudo tee /etc/apt/sources.list.d/arm64.list
-          echo "deb [arch=arm64] http://ports.ubuntu.com/ $(lsb_release -cs)-updates main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list.d/arm64.list
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
             gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
             clang lld \
             protobuf-compiler \
-            pkg-config \
-            libssl-dev:arm64
+            pkg-config
 
       # ── System dependencies (macOS) ──────────────────────────────────────
       - name: Install system deps (macOS)
@@ -161,6 +155,7 @@ jobs:
             --bin anime `
             --profile release-dist `
             --target ${{ matrix.target }} `
+            --no-default-features `
             --features release-dist
 
       # ── Strip & package ──────────────────────────────────────────────────
