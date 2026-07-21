@@ -1,0 +1,94 @@
+name: Release preflight
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # PR merge refs change on every push; use the stable PR number to cancel an
+  # obsolete, expensive build when the PR is updated.
+  group: preflight-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: '0'
+  SCCACHE_GHA_ENABLED: 'true'
+  RUSTC_WRAPPER: sccache
+
+jobs:
+  linux-release-dist:
+    name: Linux release-dist build
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.96.0'
+
+      - name: Install sccache
+        uses: mozilla-actions/sccache-action@v0.0.10
+
+      - name: Cache cargo registry & git
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            clang lld cmake protobuf-compiler pkg-config libssl-dev
+
+      - name: Install DotSlash
+        uses: facebook/install-dotslash@latest
+
+      - name: Show sccache statistics before build
+        run: sccache --show-stats || true
+
+      - name: Build release distribution binary
+        run: |
+          time cargo build \
+            -p xai-grok-pager-bin \
+            --bin anime \
+            --profile release-dist \
+            --features release-dist
+
+      - name: Smoke-test release distribution binary
+        run: target/release-dist/anime --version
+
+      - name: Show sccache statistics after build
+        if: always()
+        run: sccache --show-stats || true
+
+      - name: Write job summary
+        if: always()
+        run: |
+          {
+            echo '## Linux release preflight'
+            echo
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo '- Build: `cargo build -p xai-grok-pager-bin --bin anime --profile release-dist --features release-dist`'
+            echo
+            echo '### sccache statistics'
+            echo '```text'
+            sccache --show-stats || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

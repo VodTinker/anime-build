@@ -74,6 +74,20 @@ cargo build -p xai-grok-pager-bin --bin anime --release  # target/release/anime
 cargo check -p xai-grok-pager-bin                         # fast validation
 ```
 
+### Release preflight
+
+Before creating a version tag, build the exact Linux distribution artifact
+locally. This catches release-only compilation failures before the cross-platform
+GitHub Actions release runs:
+
+```sh
+cargo build -p xai-grok-pager-bin --bin anime --profile release-dist --features release-dist
+```
+
+The `Release preflight` workflow runs the same Linux build for pushes to `main`,
+pull requests, and manual dispatches. The tag-only `Release` workflow remains
+the authoritative producer of the four published platform artifacts.
+
 ### Faster local rebuilds
 
 The development profile prioritizes iteration speed, and the repository uses a
