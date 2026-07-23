@@ -1,6 +1,6 @@
 <div align="center">
 
-<h1>Anime (<code>anime</code>)</h1>
+<h1><code>anibuild</code> — Anime</h1>
 
 **Anime** is a terminal-based AI coding assistant created and maintained by
 V01D. It runs as a full-screen TUI powered by OpenAI Codex through a ChatGPT
@@ -30,7 +30,7 @@ Anime is not affiliated with xAI or Grok.
 
 ## Getting started
 
-Build Anime from source, then start it:
+Build Anime from source, then start it. Run `anibuild` to start Anime. The `anime` command remains available for compatibility. The source target remains `anime`:
 
 ```sh
 cargo run -p xai-grok-pager-bin --bin anime
@@ -74,6 +74,20 @@ cargo build -p xai-grok-pager-bin --bin anime --release  # target/release/anime
 cargo check -p xai-grok-pager-bin                         # fast validation
 ```
 
+### Release preflight
+
+Before creating a version tag, build the exact Linux distribution artifact
+locally. This catches release-only compilation failures before the cross-platform
+GitHub Actions release runs:
+
+```sh
+cargo build -p xai-grok-pager-bin --bin anime --profile release-dist --features release-dist
+```
+
+The `Release preflight` workflow runs the same Linux build for pushes to `main`,
+pull requests, and manual dispatches. The tag-only `Release` workflow remains
+the authoritative producer of the four published platform artifacts.
+
 ### Faster local rebuilds
 
 The development profile prioritizes iteration speed, and the repository uses a
@@ -91,8 +105,7 @@ useful after cleaning `target/` or switching branches; the first build still
 has to compile its dependencies. Avoid workspace-wide commands while iterating:
 target the package you changed instead.
 
-The package also retains the upstream-compatible `xai-grok-pager` binary. Use
-`anime` for the ChatGPT/Codex product flow.
+The upstream-compatible `xai-grok-pager` binary remains available. The installed product command is `anibuild`; `anime` is an equivalent compatibility command.
 
 ## Authentication and models
 

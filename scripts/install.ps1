@@ -79,11 +79,22 @@ function Install-Anime {
         }
 
         Copy-Item -Path $binaryPath.FullName -Destination (Join-Path $installDir "anime.exe") -Force
+        $animePath = Join-Path $installDir 'anime.exe'
+        $anibuildPath = Join-Path $installDir 'anibuild.exe'
+        Remove-Item -Path $anibuildPath -Force -ErrorAction SilentlyContinue
+        try {
+            New-Item -ItemType HardLink -Path $anibuildPath -Target $animePath -ErrorAction Stop | Out-Null
+        }
+        catch {
+            Copy-Item -Path $animePath -Destination $anibuildPath -Force
+        }
 
         Write-Host ""
         Write-Host "  ✓ " -ForegroundColor Green -NoNewline
         Write-Host "Anime v$ANIME_VERSION installed to " -NoNewline
-        Write-Host "$installDir\anime.exe" -ForegroundColor Cyan
+        Write-Host "$animePath" -ForegroundColor Cyan
+        Write-Host "  Alias installed to " -NoNewline
+        Write-Host "$anibuildPath" -ForegroundColor Cyan
         Write-Host ""
 
         # Check and update PATH
@@ -100,8 +111,9 @@ function Install-Anime {
         }
 
         Write-Host "  Run " -NoNewline
-        Write-Host "anime" -ForegroundColor Cyan -NoNewline
+        Write-Host "anibuild" -ForegroundColor Cyan -NoNewline
         Write-Host " to start."
+        Write-Host "  anime remains available as a compatibility command."
         Write-Host ""
     }
     finally {

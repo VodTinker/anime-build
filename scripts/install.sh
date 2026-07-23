@@ -113,9 +113,12 @@ main() {
     fi
 
     chmod +x "$install_dir/anime"
+    rm -f "$install_dir/anibuild"
+    ln -s anime "$install_dir/anibuild"
 
     printf "\n"
-    ok "Anime v${ANIME_VERSION} installed to ${BOLD}${install_dir}/anime${RESET}"
+    ok "Anime v${ANIME_VERSION} installed executable to ${BOLD}${install_dir}/anime${RESET}"
+    ok "Command alias installed to ${BOLD}${install_dir}/anibuild${RESET}"
     printf "\n"
 
     # Check if install dir is in PATH
@@ -148,7 +151,7 @@ main() {
             ;;
     esac
 
-    info "Run ${BOLD}anime${RESET} to start."
+    info "Run ${BOLD}anibuild${RESET} to start. ${BOLD}anime${RESET} remains available for compatibility."
     printf "\n"
 }
 

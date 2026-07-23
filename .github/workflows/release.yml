@@ -15,12 +15,17 @@ on:
     tags:
       - 'v*'
 
-  # Allow manual dispatch for testing the pipeline without a tag push.
+  # Supply the existing version tag to rebuild or republish that release.
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag (e.g. v0.2.102)'
+        description: 'Existing release tag (e.g. v0.2.102)'
         required: true
+        type: string
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -39,6 +44,8 @@ env:
 jobs:
   # ── Build matrix ────────────────────────────────────────────────────────────
   build:
+    name: Build ${{ matrix.asset }}
+    timeout-minutes: 360
     strategy:
       fail-fast: false
       matrix:
@@ -74,8 +81,26 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - name: Checkout
+      - name: Checkout workflow source
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Validate manual release tag
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          case "$RELEASE_TAG" in
+            v*) ;;
+            *) echo "Release tag must start with v: $RELEASE_TAG" >&2; exit 1 ;;
+          esac
+          git ls-remote --exit-code --refs origin "refs/tags/$RELEASE_TAG" >/dev/null
+
+      - name: Checkout release ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -117,7 +142,8 @@ jobs:
             gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
             clang lld cmake \
             protobuf-compiler \
-            pkg-config
+            pkg-config \
+            qemu-user
 
       # ── System dependencies (macOS) ────────────────────────────────────────
       - name: Install system deps (macOS)
@@ -128,6 +154,9 @@ jobs:
       # ── DotSlash (needed for bin/protoc fallback) ──────────────────────────
       - name: Install DotSlash
         uses: facebook/install-dotslash@latest
+
+      - name: Show sccache statistics before build
+        run: sccache --show-stats || true
 
       # ── Build ──────────────────────────────────────────────────────────────
       - name: Build
@@ -143,19 +172,48 @@ jobs:
           # Allow pkg-config to work in cross-compilation mode.
           PKG_CONFIG_ALLOW_CROSS: ${{ matrix.target == 'aarch64-unknown-linux-gnu' && '1' || '' }}
         run: |
-          cargo build \
+          time cargo build \
             -p xai-grok-pager-bin \
             --bin anime \
             --profile release-dist \
             --target ${{ matrix.target }} \
             --features release-dist
 
+      - name: Smoke test release binary (native targets)
+        if: matrix.target != 'aarch64-unknown-linux-gnu'
+        run: target/${{ matrix.target }}/release-dist/anime --version
+
+      - name: Smoke test release binary (Linux aarch64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: qemu-aarch64 -L /usr/aarch64-linux-gnu target/${{ matrix.target }}/release-dist/anime --version
+
+      - name: Show sccache statistics after build
+        if: always()
+        run: sccache --show-stats || true
+
+      - name: Write build summary
+        if: always()
+        run: |
+          {
+            echo "## ${{ matrix.asset }}"
+            echo
+            echo "- Target: \`${{ matrix.target }}\`"
+            echo "- Runner: \`${{ matrix.os }}\`"
+            echo
+            echo '### sccache statistics'
+            echo '```text'
+            sccache --show-stats || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       # ── Strip & package ────────────────────────────────────────────────────
       - name: Strip binary
+        if: success()
         run: |
           ${{ matrix.strip_cmd }} target/${{ matrix.target }}/release-dist/anime
 
       - name: Package
+        if: success()
         run: |
           mkdir -p staging
           cp target/${{ matrix.target }}/release-dist/anime staging/
@@ -163,6 +221,7 @@ jobs:
           tar czf ../${{ matrix.asset }}.tar.gz anime
 
       - name: Upload build artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.asset }}
@@ -173,6 +232,7 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Download all artifacts
