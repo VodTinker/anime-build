@@ -142,7 +142,8 @@ jobs:
             gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
             clang lld cmake \
             protobuf-compiler \
-            pkg-config
+            pkg-config \
+            qemu-user
 
       # ── System dependencies (macOS) ────────────────────────────────────────
       - name: Install system deps (macOS)
@@ -177,6 +178,14 @@ jobs:
             --profile release-dist \
             --target ${{ matrix.target }} \
             --features release-dist
+
+      - name: Smoke test release binary (native targets)
+        if: matrix.target != 'aarch64-unknown-linux-gnu'
+        run: target/${{ matrix.target }}/release-dist/anime --version
+
+      - name: Smoke test release binary (Linux aarch64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: qemu-aarch64 -L /usr/aarch64-linux-gnu target/${{ matrix.target }}/release-dist/anime --version
 
       - name: Show sccache statistics after build
         if: always()
