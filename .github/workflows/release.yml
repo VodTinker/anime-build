@@ -57,16 +57,16 @@ jobs:
             strip_cmd: strip
             ext: ''
 
-          # ── Linux aarch64 (cross-compiled on x86_64 runner) ──
+          # ── Linux aarch64 ──
           - target: aarch64-unknown-linux-gnu
-            os: ubuntu-latest
+            os: ubuntu-24.04-arm
             asset: anime-linux-aarch64
-            strip_cmd: aarch64-linux-gnu-strip
+            strip_cmd: strip
             ext: ''
 
           # ── macOS x86_64 (Intel) ──
           - target: x86_64-apple-darwin
-            os: macos-13
+            os: macos-14
             asset: anime-darwin-x86_64
             strip_cmd: strip
             ext: ''
@@ -134,18 +134,20 @@ jobs:
             protobuf-compiler \
             pkg-config libssl-dev
 
-      - name: Install system deps (Linux aarch64 cross)
+      - name: Install system deps (Linux aarch64)
         if: matrix.target == 'aarch64-unknown-linux-gnu'
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
-            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
             clang lld cmake \
             protobuf-compiler \
-            pkg-config \
-            qemu-user
+            pkg-config libssl-dev
 
       # ── System dependencies (macOS) ────────────────────────────────────────
+      - name: Install Rosetta
+        if: matrix.target == 'x86_64-apple-darwin'
+        run: softwareupdate --install-rosetta --agree-to-license
+
       - name: Install system deps (macOS)
         if: startsWith(matrix.os, 'macos')
         run: |
@@ -160,17 +162,6 @@ jobs:
 
       # ── Build ──────────────────────────────────────────────────────────────
       - name: Build
-        env:
-          # ── aarch64 cross-compilation ──
-          # Linker override (config.toml doesn't set one for this target).
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: ${{ matrix.target == 'aarch64-unknown-linux-gnu' && 'aarch64-linux-gnu-gcc' || '' }}
-          # C/C++/AR cross-compilers for -sys crates (aws-lc-sys, ring,
-          # jemalloc, libgit2, sqlite, etc.).
-          CC_aarch64_unknown_linux_gnu: ${{ matrix.target == 'aarch64-unknown-linux-gnu' && 'aarch64-linux-gnu-gcc' || '' }}
-          CXX_aarch64_unknown_linux_gnu: ${{ matrix.target == 'aarch64-unknown-linux-gnu' && 'aarch64-linux-gnu-g++' || '' }}
-          AR_aarch64_unknown_linux_gnu: ${{ matrix.target == 'aarch64-unknown-linux-gnu' && 'aarch64-linux-gnu-ar' || '' }}
-          # Allow pkg-config to work in cross-compilation mode.
-          PKG_CONFIG_ALLOW_CROSS: ${{ matrix.target == 'aarch64-unknown-linux-gnu' && '1' || '' }}
         run: |
           time cargo build \
             -p xai-grok-pager-bin \
@@ -179,13 +170,13 @@ jobs:
             --target ${{ matrix.target }} \
             --features release-dist
 
-      - name: Smoke test release binary (native targets)
-        if: matrix.target != 'aarch64-unknown-linux-gnu'
-        run: target/${{ matrix.target }}/release-dist/anime --version
+      - name: Smoke test release binary (macOS Intel)
+        if: matrix.target == 'x86_64-apple-darwin'
+        run: arch -x86_64 target/${{ matrix.target }}/release-dist/anime --version
 
-      - name: Smoke test release binary (Linux aarch64)
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: qemu-aarch64 -L /usr/aarch64-linux-gnu target/${{ matrix.target }}/release-dist/anime --version
+      - name: Smoke test release binary (native targets)
+        if: matrix.target != 'x86_64-apple-darwin'
+        run: target/${{ matrix.target }}/release-dist/anime --version
 
       - name: Show sccache statistics after build
         if: always()
