@@ -126,6 +126,22 @@ window. Responses requests are adapted for Codex compatibility: system prompts
 are sent as developer instructions, `temperature` is omitted, and streamed
 function calls are reconstructed from SSE deltas.
 
+### Re-authenticating / Invalidated Tokens
+
+If your authentication token expires or gets invalidated (`HTTP 401 Unauthorized: token_invalidated`), run the login command to re-authenticate:
+
+```sh
+anibuild login --openai
+# or using cargo:
+cargo run -p xai-grok-pager-bin --bin anime -- login --openai
+```
+
+To delete cached credentials manually and start fresh:
+
+```sh
+rm -f ~/.config/anime/openai-codex.json
+```
+
 ## Local-only build and privacy
 
 Anime is intentionally built for local development. The following features are
