@@ -38,10 +38,11 @@ else
     RED='' GREEN='' YELLOW='' CYAN='' BOLD='' RESET=''
 fi
 
-info()  { printf "%b\n" "${CYAN}${BOLD}info${RESET}  $*"; }
-ok()    { printf "%b\n" "${GREEN}${BOLD}  ✓${RESET}  $*"; }
-warn()  { printf "%b\n" "${YELLOW}${BOLD}warn${RESET}  $*" >&2; }
-error() { printf "%b\n" "${RED}${BOLD}error${RESET} $*" >&2; exit 1; }
+info()  { printf "%binfo%b  %b\n" "${CYAN}${BOLD}" "${RESET}" "$*"; }
+ok()    { printf "%b  ✓%b  %b\n" "${GREEN}${BOLD}" "${RESET}" "$*"; }
+warn()  { printf "%bwarn%b  %b\n" "${YELLOW}${BOLD}" "${RESET}" "$*" >&2; }
+error() { printf "%berror%b %b\n" "${RED}${BOLD}" "${RESET}" "$*" >&2; exit 1; }
+
 
 # ─── Platform detection ──────────────────────────────────────────────────────
 
@@ -66,43 +67,112 @@ detect_arch() {
     esac
 }
 
-# ─── Download helper (curl preferred, falls back to wget) ────────────────────
+# ─── Download & Checksum helpers ──────────────────────────────────────────────
 
 download() {
     url="$1"
     output="$2"
     if command -v curl > /dev/null 2>&1; then
-        curl -fsSL "$url" -o "$output"
+        curl --proto '=https' --tlsv1.2 -fsSL "$url" -o "$output"
     elif command -v wget > /dev/null 2>&1; then
-        wget -q "$url" -O "$output"
+        wget --https-only --secure-protocol=TLSv1_2 -q "$url" -O "$output"
     else
         error "curl or wget is required to download Anime."
     fi
 }
 
+verify_checksum() {
+    file_to_check="$1"
+    url_to_check="$2"
+
+    sha_url="${url_to_check}.sha256"
+    tmp_sha="${file_to_check}.sha256"
+
+    if download "$sha_url" "$tmp_sha" 2>/dev/null; then
+        expected_hash="$(tr -d '[:space:]' < "$tmp_sha" | awk '{print $1}')"
+        if [ -n "$expected_hash" ]; then
+            actual_hash=""
+            if command -v sha256sum >/dev/null 2>&1; then
+                actual_hash="$(sha256sum "$file_to_check" | awk '{print $1}')"
+            elif command -v shasum >/dev/null 2>&1; then
+                actual_hash="$(shasum -a 256 "$file_to_check" | awk '{print $1}')"
+            elif command -v openssl >/dev/null 2>&1; then
+                actual_hash="$(openssl dgst -sha256 "$file_to_check" | awk '{print $2}')"
+            fi
+
+            if [ -n "$actual_hash" ]; then
+                if [ "$expected_hash" = "$actual_hash" ]; then
+                    ok "SHA256 checksum verified successfully."
+                else
+                    error "SHA256 checksum mismatch! Expected: ${expected_hash}, Got: ${actual_hash}"
+                fi
+            fi
+        fi
+    fi
+}
+
+# ─── Existing Installation & Version Detection ────────────────────────────────
+
+get_installed_version() {
+    target_dir="$1"
+    target_bin=""
+    if [ -x "${target_dir}/anime" ]; then
+        target_bin="${target_dir}/anime"
+    elif command -v anime >/dev/null 2>&1; then
+        target_bin="$(command -v anime)"
+    fi
+
+    if [ -n "$target_bin" ]; then
+        ver="$("$target_bin" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?' | head -n1 || true)"
+        if [ -n "$ver" ]; then
+            echo "$ver"
+            return 0
+        fi
+    fi
+    echo ""
+}
+
+compare_versions() {
+    v1="$(echo "$1" | sed -E 's/^v//')"
+    v2="$(echo "$2" | sed -E 's/^v//')"
+
+    if [ "$v1" = "$v2" ]; then
+        echo "eq"
+        return 0
+    fi
+
+    m1="$(echo "$v1" | cut -d. -f1)"
+    n1="$(echo "$v1" | cut -d. -f2)"
+    p1="$(echo "$v1" | cut -d. -f3 | cut -d- -f1)"
+
+    m2="$(echo "$v2" | cut -d. -f1)"
+    n2="$(echo "$v2" | cut -d. -f2)"
+    p2="$(echo "$v2" | cut -d. -f3 | cut -d- -f1)"
+
+    m1="${m1:-0}"; n1="${n1:-0}"; p1="${p1:-0}"
+    m2="${m2:-0}"; n2="${n2:-0}"; p2="${p2:-0}"
+
+    if [ "$m1" -gt "$m2" ]; then echo "gt"; return 0; fi
+    if [ "$m1" -lt "$m2" ]; then echo "lt"; return 0; fi
+    if [ "$n1" -gt "$n2" ]; then echo "gt"; return 0; fi
+    if [ "$n1" -lt "$n2" ]; then echo "lt"; return 0; fi
+    if [ "$p1" -gt "$p2" ]; then echo "gt"; return 0; fi
+    if [ "$p1" -lt "$p2" ]; then echo "lt"; return 0; fi
+
+    echo "eq"
+}
+
 # ─── Main ─────────────────────────────────────────────────────────────────────
 
 main() {
-    printf "\n"
-    info "Installing ${BOLD}Anime v${ANIME_VERSION}${RESET}…"
-    printf "\n"
-
-    platform="$(detect_platform)"
-    arch="$(detect_arch)"
-
-    info "Detected ${BOLD}${platform}-${arch}${RESET}"
-
-    url="${ANIME_BASE_URL}/v${ANIME_VERSION}/anime-${platform}-${arch}.tar.gz"
-
-    info "Downloading from GitHub Releases…"
-
-    tmpdir="$(mktemp -d)"
-    # shellcheck disable=SC2064
-    trap "rm -rf '$tmpdir'" EXIT INT TERM
-
-    download "$url" "$tmpdir/anime.tar.gz"
-
-    tar xzf "$tmpdir/anime.tar.gz" -C "$tmpdir"
+    FORCE_INSTALL="false"
+    DRY_RUN="false"
+    for arg in "$@"; do
+        case "$arg" in
+            -f|--force) FORCE_INSTALL="true" ;;
+            -d|--dry-run) DRY_RUN="true" ;;
+        esac
+    done
 
     # Determine install directory
     install_dir="${ANIME_INSTALL_DIR:-}"
@@ -114,23 +184,84 @@ main() {
         fi
     fi
 
+    platform="$(detect_platform)"
+    arch="$(detect_arch)"
+    url="${ANIME_BASE_URL}/v${ANIME_VERSION}/anime-${platform}-${arch}.tar.gz"
+
+    if [ "$DRY_RUN" = "true" ]; then
+        printf "\n"
+        info "${BOLD}[DRY RUN] Simulation mode enabled — no changes will be made to your system.${RESET}"
+        info "[DRY RUN] Target version : ${BOLD}Anime v${ANIME_VERSION}${RESET}"
+        info "[DRY RUN] Target system  : ${BOLD}${platform}-${arch}${RESET}"
+        info "[DRY RUN] Download URL   : ${url}"
+        info "[DRY RUN] Install path   : ${install_dir}/anime"
+        info "[DRY RUN] Alias path     : ${install_dir}/anibuild"
+        printf "\n"
+        exit 0
+    fi
+
+    printf "\n"
+    info "Detected system: ${BOLD}${platform}-${arch}${RESET}"
+
+    # Check for existing installation
+    installed_ver="$(get_installed_version "$install_dir")"
+
+    if [ -n "$installed_ver" ]; then
+        cmp="$(compare_versions "$installed_ver" "$ANIME_VERSION")"
+        if [ "$cmp" = "eq" ] && [ "${ANIME_FORCE:-0}" != "1" ] && [ "$FORCE_INSTALL" != "true" ]; then
+            ok "Anime ${BOLD}v${installed_ver}${RESET} is already installed and up to date!"
+            info "Use ${BOLD}ANIME_FORCE=1${RESET} or ${BOLD}--force${RESET} to reinstall anyway."
+            printf "\n"
+            exit 0
+        elif [ "$cmp" = "lt" ]; then
+            info "Upgrading Anime: ${YELLOW}v${installed_ver}${RESET} -> ${GREEN}v${ANIME_VERSION}${RESET}…"
+        elif [ "$cmp" = "gt" ]; then
+            info "Downgrading Anime: ${YELLOW}v${installed_ver}${RESET} -> ${GREEN}v${ANIME_VERSION}${RESET}…"
+        else
+            info "Reinstalling Anime ${BOLD}v${ANIME_VERSION}${RESET}…"
+        fi
+    else
+        info "Installing ${BOLD}Anime v${ANIME_VERSION}${RESET}…"
+    fi
+    printf "\n"
+
+    info "Downloading from GitHub Releases…"
+
+    # Restrict file permissions for temp workspace
+    umask 077
+    tmpdir="$(mktemp -d)"
+    # shellcheck disable=SC2064
+    trap "rm -rf '$tmpdir'" EXIT INT TERM
+
+    download "$url" "$tmpdir/anime.tar.gz"
+    verify_checksum "$tmpdir/anime.tar.gz" "$url"
+
+    tar xzf "$tmpdir/anime.tar.gz" -C "$tmpdir"
+
     mkdir -p "$install_dir"
 
-    # Install the binary
+    # Install the binary atomically
+    new_bin=""
     if [ -f "$tmpdir/anime" ]; then
-        cp "$tmpdir/anime" "$install_dir/anime"
+        new_bin="$tmpdir/anime"
     elif [ -f "$tmpdir/anime-${platform}-${arch}/anime" ]; then
-        cp "$tmpdir/anime-${platform}-${arch}/anime" "$install_dir/anime"
+        new_bin="$tmpdir/anime-${platform}-${arch}/anime"
     else
         error "Could not find the anime binary in the downloaded archive."
     fi
 
-    chmod +x "$install_dir/anime"
+    chmod +x "$new_bin"
+    cp "$new_bin" "$install_dir/anime.tmp"
+    mv -f "$install_dir/anime.tmp" "$install_dir/anime"
     rm -f "$install_dir/anibuild"
     ln -s anime "$install_dir/anibuild"
 
     printf "\n"
-    ok "Anime v${ANIME_VERSION} installed executable to ${BOLD}${install_dir}/anime${RESET}"
+    if [ -n "$installed_ver" ]; then
+        ok "Anime updated successfully to ${BOLD}v${ANIME_VERSION}${RESET} at ${BOLD}${install_dir}/anime${RESET}"
+    else
+        ok "Anime v${ANIME_VERSION} installed successfully to ${BOLD}${install_dir}/anime${RESET}"
+    fi
     ok "Command alias installed to ${BOLD}${install_dir}/anibuild${RESET}"
     printf "\n"
 
@@ -169,3 +300,4 @@ main() {
 }
 
 main "$@"
+

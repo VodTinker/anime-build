@@ -36,7 +36,22 @@ curl -fsSL https://anibuild.online/install.sh | sh
 
 *Note: Windows is currently not supported.*
 
+### Installer options & flags
+The installer automatically detects existing installations, checks for updates, and verifies SHA256 checksums.
+
+- **Reinstall / Force**: Force reinstallation even if already up to date:
+  ```sh
+  curl -fsSL https://anibuild.online/install.sh | sh -s -- --force
+  # Or via environment variable:
+  ANIME_FORCE=1 curl -fsSL https://anibuild.online/install.sh | sh
+  ```
+- **Dry-run Simulation**: Test the installation steps without modifying disk:
+  ```sh
+  curl -fsSL https://anibuild.online/install.sh | sh -s -- --dry-run
+  ```
+
 Once installed, start the assistant by running `anibuild` (or `anime`).
+
 
 ## Getting started
 
