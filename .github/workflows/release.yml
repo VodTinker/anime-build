@@ -57,13 +57,6 @@ jobs:
             strip_cmd: strip
             ext: ''
 
-          # ── Linux aarch64 ──
-          - target: aarch64-unknown-linux-gnu
-            os: ubuntu-24.04-arm
-            asset: anime-linux-aarch64
-            strip_cmd: strip
-            ext: ''
-
           # ── macOS x86_64 (Intel) ──
           - target: x86_64-apple-darwin
             os: macos-14
@@ -241,6 +234,5 @@ jobs:
           generate_release_notes: true
           files: |
             artifacts/anime-linux-x86_64/anime-linux-x86_64.tar.gz
-            artifacts/anime-linux-aarch64/anime-linux-aarch64.tar.gz
             artifacts/anime-darwin-x86_64/anime-darwin-x86_64.tar.gz
             artifacts/anime-darwin-aarch64/anime-darwin-aarch64.tar.gz
