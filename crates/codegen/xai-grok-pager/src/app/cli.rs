@@ -53,6 +53,10 @@ pub enum Command {
     Memory(crate::memory_cmd::MemoryArgs),
     /// List available models and exit
     Models,
+    /// Interactively configure AI providers (OpenRouter, Anthropic, OpenAI, DeepSeek, Ollama)
+    #[command(visible_alias = "providers")]
+    Provider,
+
     /// List, search, or restore sessions
     Sessions(crate::sessions_cmd::SessionsArgs),
     /// Fetch and install managed configuration

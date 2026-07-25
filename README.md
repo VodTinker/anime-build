@@ -52,6 +52,17 @@ The installer automatically detects existing installations, checks for updates, 
 
 Once installed, start the assistant by running `anibuild` (or `anime`).
 
+## Interactive Provider Setup (`anibuild provider`)
+
+Anime supports OpenRouter, Anthropic, OpenAI, DeepSeek, Ollama, and any custom OpenAI-compatible endpoint. You can run the interactive setup wizard:
+
+```sh
+anibuild provider
+```
+
+This wizard will guide you to select your provider, enter your API key, and configure your default model in `~/.anime/config.toml`.
+
+
 
 ## Getting started
 
