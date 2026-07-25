@@ -360,6 +360,13 @@ opt-level = 0
 lto = false
 incremental = true
 
+# Speed up build-script and proc-macro execution during local dev builds
+[profile.dev.build-override]
+opt-level = 3
+
+[profile.dev.package."*"]
+opt-level = 2
+
 [profile.bench]
 debug = true
 
