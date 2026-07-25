@@ -1,7 +1,7 @@
 # Security Policy
 
-Please report security vulnerabilities via our HackerOne program:
+Please report security vulnerabilities privately via GitHub Security Advisories:
 
-https://hackerone.com/x
+https://github.com/VodTinker/anime-build/security/advisories/new
 
 Do not open public GitHub issues for security reports.

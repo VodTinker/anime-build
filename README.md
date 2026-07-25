@@ -28,6 +28,16 @@ Anime is not affiliated with xAI or Grok.
 
 ---
 
+## Quick installation (Linux & macOS)
+
+```sh
+curl -fsSL https://anibuild.online/install.sh | sh
+```
+
+*Note: Windows is currently not supported.*
+
+Once installed, start the assistant by running `anibuild` (or `anime`).
+
 ## Getting started
 
 Build Anime from source, then start it. Run `anibuild` to start Anime. The `anime` command remains available for compatibility. The source target remains `anime`:
@@ -104,6 +114,14 @@ sccache --show-stats
 useful after cleaning `target/` or switching branches; the first build still
 has to compile its dependencies. Avoid workspace-wide commands while iterating:
 target the package you changed instead.
+
+### Freeing up disk space
+
+Cargo stores build artifacts in `target/`. To clean up artifacts and reclaim disk space:
+
+```sh
+cargo clean
+```
 
 The upstream-compatible `xai-grok-pager` binary remains available. The installed product command is `anibuild`; `anime` is an equivalent compatibility command.
 
