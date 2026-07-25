@@ -1292,15 +1292,28 @@ impl AgentView {
             .as_ref()
             .and_then(|c| (c.total > 0).then_some(c.total))
             .or(model_window);
-        if let Some(ctx_line) = context_bar::context_bar_line_for_session(
+        let active_model = self.session.models.current.as_ref().map(|m| m.0.as_ref());
+
+
+        if self.hit_context.hovered {
+            if let Some(status_line) = context_bar::statusline_line(
+                ctx_used,
+                ctx_total,
+                active_model,
+                &theme,
+            ) {
+                status.push("context", status_line);
+            }
+        } else if let Some(ctx_line) = context_bar::context_bar_line_for_session(
             ctx_used,
             ctx_total,
-            self.hit_context.hovered,
+            false,
             &theme,
             self.chat_kind,
         ) {
             status.push("context", ctx_line);
         }
+
         let running = self.session.current_prompt_id.as_deref();
         let queue_len = self.session.queue_len()
             + self

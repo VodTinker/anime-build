@@ -53,6 +53,31 @@ pub fn fmt_tokens(n: u64) -> String {
     }
 }
 
+/// Format estimated session cost in USD (based on ~$4.00 per 1M context tokens).
+pub fn fmt_cost(used_tokens: u64) -> String {
+    let cost_usd = (used_tokens as f64) * 0.000004;
+    if cost_usd < 0.01 {
+        format!("${cost_usd:.3}")
+    } else {
+        format!("${cost_usd:.2}")
+    }
+}
+
+/// Format estimated 5-hour rolling context limit percentage (default 500K 5h window).
+pub fn fmt_rate_limit_5h(used_tokens: u64) -> String {
+    let limit = 500_000.0;
+    let pct = ((used_tokens as f64 / limit) * 100.0).min(100.0);
+    format!("5h: {:.0}%", pct)
+}
+
+/// Format estimated 7-day quota percentage (default 5M 7d window).
+pub fn fmt_rate_limit_7d(used_tokens: u64) -> String {
+    let limit = 5_000_000.0;
+    let pct = ((used_tokens as f64 / limit) * 100.0).min(100.0);
+    format!("7d: {:.0}%", pct)
+}
+
+
 // ---------------------------------------------------------------------------
 // Color blending
 // ---------------------------------------------------------------------------
@@ -242,6 +267,45 @@ pub fn context_bar_line_for_session(
         )))
     }
 }
+
+/// Build a Claude Code style statusline: `1.3K / 200K (0.7%) │ 5h: 0% │ 7d: 0% │ $0.005`
+pub fn statusline_line(
+    used_tokens: Option<u64>,
+    total_tokens: Option<u64>,
+    model_name: Option<&str>,
+    theme: &Theme,
+) -> Option<Line<'static>> {
+    let used = used_tokens?;
+    let total = total_tokens.filter(|&t| t > 0)?;
+    let pct = xai_token_estimation::usage_percentage(used, total);
+    let cost = fmt_cost(used);
+    let limit_5h = fmt_rate_limit_5h(used);
+    let limit_7d = fmt_rate_limit_7d(used);
+
+    let breakpoints = default_breakpoints(theme);
+    let color = crate::theme::quantize(blend_color(pct, &breakpoints));
+
+    let mut spans = vec![
+        Span::styled(
+            format!("{} / {} ({})", fmt_tokens(used), fmt_tokens(total), fmt_pct5(pct)),
+            Style::default().fg(color).bg(theme.bg_base),
+        ),
+        Span::styled(format!(" {SEPARATOR} "), Style::default().fg(theme.text_secondary).bg(theme.bg_base)),
+        Span::styled(limit_5h, Style::default().fg(theme.text_primary).bg(theme.bg_base)),
+        Span::styled(format!(" {SEPARATOR} "), Style::default().fg(theme.text_secondary).bg(theme.bg_base)),
+        Span::styled(limit_7d, Style::default().fg(theme.text_primary).bg(theme.bg_base)),
+        Span::styled(format!(" {SEPARATOR} "), Style::default().fg(theme.text_secondary).bg(theme.bg_base)),
+        Span::styled(cost, Style::default().fg(theme.accent_user).bg(theme.bg_base)),
+    ];
+
+    if let Some(model) = model_name {
+        spans.push(Span::styled(format!(" {SEPARATOR} "), Style::default().fg(theme.text_secondary).bg(theme.bg_base)));
+        spans.push(Span::styled(model.to_string(), Style::default().fg(theme.text_secondary).bg(theme.bg_base)));
+    }
+
+    Some(Line::from(spans))
+}
+
 
 // ---------------------------------------------------------------------------
 // Tests
