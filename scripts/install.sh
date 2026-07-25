@@ -6,11 +6,24 @@
 #   ANIME_INSTALL_DIR  — override the install directory (default: ~/.local/bin)
 #   ANIME_VERSION      — override the version to install
 
-set -eu
-
-ANIME_VERSION="${ANIME_VERSION:-0.2.102}"
 ANIME_REPO="VodTinker/anime-build"
 ANIME_BASE_URL="https://github.com/${ANIME_REPO}/releases/download"
+
+get_latest_version() {
+    latest=""
+    if command -v curl > /dev/null 2>&1; then
+        latest="$(curl -fsSL "https://api.github.com/repos/${ANIME_REPO}/releases/latest" 2>/dev/null | grep '"tag_name":' | sed -E 's/.*"v?([^"]+)".*/\1/' || true)"
+    elif command -v wget > /dev/null 2>&1; then
+        latest="$(wget -qO- "https://api.github.com/repos/${ANIME_REPO}/releases/latest" 2>/dev/null | grep '"tag_name":' | sed -E 's/.*"v?([^"]+)".*/\1/' || true)"
+    fi
+    if [ -n "$latest" ]; then
+        echo "$latest"
+    else
+        echo "0.2.104"
+    fi
+}
+
+ANIME_VERSION="${ANIME_VERSION:-$(get_latest_version)}"
 
 # ─── Colour helpers (disabled when stdout is not a terminal) ──────────────────
 
