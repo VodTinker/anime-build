@@ -1687,7 +1687,7 @@ async fn async_main() -> Result<()> {
         .and_then(|path| {
             std::path::Path::new(&path)
                 .file_name()
-                .map(|name| name == "anime")
+                .map(|name| name == "anime" || name == "anibuild" || name == "anime.exe" || name == "anibuild.exe")
         })
         .unwrap_or(false)
     {
