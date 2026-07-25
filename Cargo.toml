@@ -312,6 +312,9 @@ zstd = "0.13"
 [profile.release]
 incremental = true
 panic = "abort"
+opt-level = 2
+codegen-units = 16
+
 
 # Hardened release profile for shipping to end users (alpha + stable).
 # Use `cargo build --profile release-dist` for distribution builds.
