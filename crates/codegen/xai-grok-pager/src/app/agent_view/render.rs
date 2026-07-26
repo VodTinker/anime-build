@@ -1295,24 +1295,16 @@ impl AgentView {
         let active_model = self.session.models.current.as_ref().map(|m| m.0.as_ref());
 
 
-        if self.hit_context.hovered {
-            if let Some(status_line) = context_bar::statusline_line(
-                ctx_used,
-                ctx_total,
-                active_model,
-                &theme,
-            ) {
-                status.push("context", status_line);
-            }
-        } else if let Some(ctx_line) = context_bar::context_bar_line_for_session(
+        if let Some(status_line) = context_bar::statusline_line(
             ctx_used,
             ctx_total,
-            false,
+            active_model,
             &theme,
-            self.chat_kind,
         ) {
-            status.push("context", ctx_line);
+            status.push("context", status_line);
         }
+
+
 
         let running = self.session.current_prompt_id.as_deref();
         let queue_len = self.session.queue_len()
@@ -3221,11 +3213,27 @@ impl AgentView {
                 }
                 hint
             });
+            let statusline_str = ctx_used.and_then(|used| {
+                ctx_total.map(|total| {
+                    let pct = xai_token_estimation::usage_percentage(used, total);
+                    format!(
+                        "{} / {} ({}) │ {} │ {} │ {}",
+                        context_bar::fmt_tokens(used),
+                        context_bar::fmt_tokens(total),
+                        context_bar::fmt_pct5(pct),
+                        context_bar::fmt_rate_limit_5h(used),
+                        context_bar::fmt_rate_limit_7d(used),
+                        context_bar::fmt_cost(used)
+                    )
+                })
+            });
             ShortcutsBar::new(&hints)
                 .compact(5, help_hint)
                 .with_pending(pending_hint)
+                .with_right_text(statusline_str.as_deref())
                 .render(layout.shortcuts, buf);
         }
+
         let is_plan_viewer = self.is_plan_viewer();
         let has_plan_comments = !self.plan_comments.is_empty();
         let casual_commenting = self.is_casual_commenting();
