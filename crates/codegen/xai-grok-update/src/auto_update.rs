@@ -2315,8 +2315,8 @@ pub async fn run_update(
         {
             tracing::warn!("Failed to persist auto_update=false for pinned install: {e}");
         }
-        eprintln!("  ✓ grok v{} installed successfully!", version);
-        eprintln!("  Please restart Grok.");
+        eprintln!("  ✓ anibuild v{} installed successfully!", version);
+        eprintln!("  Please restart Anibuild.");
         return Ok(Some(version.to_string()));
     }
 
@@ -2430,10 +2430,10 @@ pub async fn run_update(
     let stable_ptr = try_fetch_stable_pointer().await;
     write_version_cache(target_version, stable_ptr.as_deref()).await;
     refresh_deployment_config().await;
-    eprintln!("  ✓ grok v{} installed successfully!", target_version);
+    eprintln!("  ✓ anibuild v{} installed successfully!", target_version);
 
     if !force && std::env::var_os("GROK_AUTO_UPDATE").is_none() {
-        eprintln!("  Please restart Grok.");
+        eprintln!("  Please restart Anibuild.");
     }
     Ok(Some(target_version.to_string()))
 }
