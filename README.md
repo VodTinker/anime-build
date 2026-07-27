@@ -1,267 +1,108 @@
-<div align="center">
+# ANIBUILD
 
-<h1><code>anibuild</code> — Anime</h1>
+> **Terminal-native AI coding agent harness**  
+> Codebase-aware, zero-telemetry, local execution with ChatGPT Pro/Plus & custom API key support.
 
-**Anime** is a terminal-based AI coding assistant created and maintained by
-V01D. It runs as a full-screen TUI powered by OpenAI Codex through a ChatGPT
-account. Anime understands your codebase, edits files, executes shell commands,
-and manages long-running tasks — interactively, headlessly for scripting/CI, or
-embedded in editors via the Agent Client Protocol (ACP).
-
-[Getting started](#getting-started) ·
-[Building from source](#building-from-source) ·
-[Authentication and models](#authentication-and-models) ·
-[Privacy](#privacy) ·
-[Documentation](#documentation) ·
-[Repository layout](#repository-layout) ·
-[Development](#development) ·
-[Contributing](#contributing) ·
-[License](#license)
-
-This repository contains the Rust source for the Anime CLI/TUI and its agent
-runtime. It is based on a periodically synced upstream codebase; `SOURCE_REV`
-records the corresponding upstream revision.
-
-Anime is not affiliated with xAI or Grok.
-
-</div>
+![Release Version](https://img.shields.io/badge/version-v0.2.201-blue.svg)
+![License](https://img.shields.io/badge/license-Apache--2.0-green.svg)
+![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-darkgray.svg)
+![Telemetry](https://img.shields.io/badge/telemetry-zero-purple.svg)
 
 ---
 
-## Quick installation (Linux & macOS)
+## Overview
 
-```sh
+**Anibuild** is a terminal-native AI agent designed to inspect codebase structure, edit files, and execute shell commands directly from your terminal or CI environment. Built for privacy and performance, Anibuild runs 100% locally with zero telemetry and zero remote code storage.
+
+---
+
+## Quick Installation (macOS & Linux)
+
+Install the latest version (`v0.2.201`) via the one-line shell installer:
+
+```bash
 curl -fsSL https://anibuild.online/install.sh | sh
 ```
 
-*Note: Windows is currently not supported.*
+*Note: Windows is not natively supported. Use WSL, Linux, or macOS.*
 
-### Installer options & flags
-The installer automatically detects existing installations, checks for updates, and verifies SHA256 checksums.
+### Installer Flags
 
-- **Reinstall / Force**: Force reinstallation even if already up to date:
-  ```sh
-  curl -fsSL https://anibuild.online/install.sh | sh -s -- --force
-  # Or via environment variable:
-  ANIME_FORCE=1 curl -fsSL https://anibuild.online/install.sh | sh
-  ```
-- **Dry-run Simulation**: Test the installation steps without modifying disk:
-  ```sh
-  curl -fsSL https://anibuild.online/install.sh | sh -s -- --dry-run
-  ```
+```bash
+# Force reinstallation / overwrite existing binary
+curl -fsSL https://anibuild.online/install.sh | sh -s -- --force
 
-Once installed, start the assistant by running `anibuild` (or `anime`).
+# Dry-run simulation (no disk changes)
+curl -fsSL https://anibuild.online/install.sh | sh -s -- --dry-run
+```
 
-## Interactive Provider Setup (`anibuild provider`)
+---
 
-Anime supports OpenRouter, Anthropic, OpenAI, DeepSeek, Ollama, and any custom OpenAI-compatible endpoint. You can run the interactive setup wizard:
+## Key Capabilities
 
-```sh
+- **Codebase-Aware**: Maps repository structure, dependencies, and code patterns prior to executing edits.
+- **Flexible Provider Workflows**: Seamlessly authenticate via your **ChatGPT Pro / Plus** subscription or supply custom **API keys** (OpenAI, Anthropic, DeepSeek, Ollama, OpenRouter).
+- **Zero Telemetry**: Fully local process execution. Your code and prompts never leave your local workspace.
+- **Terminal & CI Native**: Runs interactively as a TUI or headlessly inside CI/CD scripts and Agent Client Protocol (ACP) workflows.
+- **Built-in Voice Dictation**: Hands-free interaction directly within the terminal prompt.
+
+---
+
+## Usage
+
+Start the agent:
+
+```bash
+anibuild
+```
+
+*(The `anime` binary is also installed for backward compatibility).*
+
+### Interactive Provider Configuration
+
+Configure your model providers, ChatGPT OAuth, or custom API keys:
+
+```bash
 anibuild provider
 ```
 
-This wizard will guide you to select your provider, enter your API key, and configure your default model in `~/.anime/config.toml`.
+### Self-Updater
 
+Update to the latest release at any time:
 
-
-## Getting started
-
-Build Anime from source, then start it. Run `anibuild` to start Anime. The `anime` command remains available for compatibility. The source target remains `anime`:
-
-```sh
-cargo run -p xai-grok-pager-bin --bin anime
+```bash
+anibuild update
 ```
 
-On an interactive first launch, Anime asks you to sign in with a ChatGPT Plus
-or Pro account. You can also start the OAuth flow explicitly:
+---
 
-```sh
-cargo run -p xai-grok-pager-bin --bin anime -- login --openai
+## Building from Source
+
+### Prerequisites
+
+- Rust toolchain (`cargo`, `rustc` 1.85+)
+- C compiler (`clang` or `gcc`), `cmake`, and `protobuf-compiler`
+
+### Compilation
+
+```bash
+git clone https://github.com/VodTinker/anime-build.git
+cd anime-build
+cargo build -p xai-grok-pager-bin --bin anibuild --release
 ```
 
-The browser-based PKCE flow stores its credentials in a dedicated local
-`openai-codex.json` file under Anime's home directory. It is intentionally
-separate from the inherited Grok authentication store.
+The compiled binary will be placed at `target/release/anibuild`.
 
-## Building from source
+---
 
-Requirements:
+## Security & Privacy
 
-- **Rust** — the toolchain is pinned by [`rust-toolchain.toml`](rust-toolchain.toml);
-  `rustup` installs it automatically on first build.
-- **[DotSlash](https://dotslash-cli.com)** — required so hermetic tools under
-  [`bin/`](bin/) (notably [`bin/protoc`](bin/protoc)) can download and run.
-  Install it and ensure `dotslash` is on your `PATH` **before** building:
+- **Local Execution**: All file operations, command executions, and context builds occur locally.
+- **Zero Telemetry**: Anibuild contains no telemetry instrumentation or tracking metrics.
+- **Direct Process Control**: Commands executed by the agent inherit your shell environment and run under your explicit process permissions.
 
-  ```sh
-  cargo install dotslash
-  # or: prebuilt packages — https://dotslash-cli.com/docs/installation/
-  /usr/bin/env dotslash --help   # sanity check
-  ```
-
-- **protoc** — proto codegen resolves [`bin/protoc`](bin/protoc) via DotSlash,
-  or falls back to a `protoc` on `PATH` / `$PROTOC`.
-- macOS and Linux are supported build hosts; Windows builds are best-effort
-  and not currently tested from this tree.
-
-```sh
-cargo run -p xai-grok-pager-bin --bin anime              # build + launch Anime
-cargo build -p xai-grok-pager-bin --bin anime --release  # target/release/anime
-cargo check -p xai-grok-pager-bin                         # fast validation
-```
-
-### Release preflight
-
-Before creating a version tag, build the exact Linux distribution artifact
-locally. This catches release-only compilation failures before the cross-platform
-GitHub Actions release runs:
-
-```sh
-cargo build -p xai-grok-pager-bin --bin anime --profile release-dist --features release-dist
-```
-
-The `Release preflight` workflow runs the same Linux build for pushes to `main`,
-pull requests, and manual dispatches. The tag-only `Release` workflow remains
-the authoritative producer of the four published platform artifacts.
-
-### Faster local rebuilds
-
-The development profile prioritizes iteration speed, and the repository uses a
-small portable wrapper that enables [`sccache`](https://github.com/mozilla/sccache)
-when it is available. It falls back to `rustc` unchanged when it is not, so
-installing it is optional. On Arch Linux:
-
-```sh
-sudo pacman -S sccache
-sccache --show-stats
-```
-
-`sccache` stores compiler results only on the local machine. It is especially
-useful after cleaning `target/` or switching branches; the first build still
-has to compile its dependencies. Avoid workspace-wide commands while iterating:
-target the package you changed instead.
-
-### Freeing up disk space
-
-Cargo stores build artifacts in `target/`. To clean up artifacts and reclaim disk space:
-
-```sh
-cargo clean
-```
-
-The upstream-compatible `xai-grok-pager` binary remains available. The installed product command is `anibuild`; `anime` is an equivalent compatibility command.
-
-## Authentication and models
-
-Anime uses ChatGPT OAuth for the Codex Responses API. It does not fall back to
-xAI credentials when launched as `anime`.
-
-The built-in model picker exposes these aliases:
-
-| Alias | Model | Default reasoning effort | Intended use |
-|---|---|---:|---|
-| `codex-terra` | `gpt-5.6-terra` | medium | Everyday coding work |
-| `codex-sol` | `gpt-5.6-sol` | high | Complex reasoning and architecture |
-| `codex-luna` | `gpt-5.6-luna` | low | Focused, lower-latency tasks |
-
-Set `ANIME_CODEX_MODEL` to choose a model before launch, or use Anime's model
-picker during a session. The Codex endpoint uses a 200,000-token context
-window. Responses requests are adapted for Codex compatibility: system prompts
-are sent as developer instructions, `temperature` is omitted, and streamed
-function calls are reconstructed from SSE deltas.
-
-### Re-authenticating / Invalidated Tokens
-
-If your authentication token expires or gets invalidated (`HTTP 401 Unauthorized: token_invalidated`), run the login command to re-authenticate:
-
-```sh
-anibuild login --openai
-# or using cargo:
-cargo run -p xai-grok-pager-bin --bin anime -- login --openai
-```
-
-To delete cached credentials manually and start fresh:
-
-```sh
-rm -f ~/.config/anime/openai-codex.json
-```
-
-## Local-only build and privacy
-
-Anime is intentionally built for local development. The following features are
-included:
-
-- The TUI, MCP and ACP integrations, ChatGPT/Codex OAuth, agents, and terminal
-  tools.
-- Normal local file tools, including PDF and PowerPoint (`.pptx`) reading.
-- Image generation and image editing.
-- Proxy uploads and local diagnostics through Rust `tracing`.
-
-To reduce the build closure and prevent remote diagnostic delivery, this fork
-permanently excludes GCS, S3/AWS, AWS-LC, video generation, Sentry, Mixpanel,
-OTLP/OpenTelemetry exporters, distributed trace propagation, and Computer Hub
-trace/log/Prometheus-metric donation. Legacy direct-cloud upload configuration
-is kept only for compatibility and reports an error that instructs users to
-configure proxy uploads instead.
-
-ChatGPT OAuth credentials are stored locally with owner-only file permissions
-and are not written to the inherited Grok `auth.json` store. For the technical
-scope of the dependency-reduced build, see
-[`docs/superpowers/specs/2026-07-19-minimal-local-build-design.md`](docs/superpowers/specs/2026-07-19-minimal-local-build-design.md).
-
-## Documentation
-
-Full online documentation is available at
-[docs.x.ai/build/overview](https://docs.x.ai/build/overview).
-
-The user guide ships with the pager crate:
-[`crates/codegen/xai-grok-pager/docs/user-guide/`](crates/codegen/xai-grok-pager/docs/user-guide/)
-— getting started, keyboard shortcuts, slash commands, configuration, theming,
-MCP servers, skills, plugins, hooks, headless mode, sandboxing, and more.
-
-## Repository layout
-
-| Path | Contents |
-|------|----------|
-| `crates/codegen/xai-grok-pager-bin` | Composition-root package; builds the `xai-grok-pager` binary |
-| `crates/codegen/xai-grok-pager` | The TUI: scrollback, prompt, modals, rendering |
-| `crates/codegen/xai-grok-shell` | Agent runtime + leader/stdio/headless entry points |
-| `crates/codegen/xai-grok-tools` | Tool implementations (terminal, file edit, search, ...) |
-| `crates/codegen/xai-grok-workspace` | Host filesystem, VCS, execution, checkpoints |
-| `crates/codegen/...` | The rest of the CLI crate closure (config, MCP, markdown, sandbox, ...) |
-| `crates/common/`, `crates/build/`, `prod/mc/` | Small shared leaf crates pulled in by the closure |
-| `third_party/` | Vendored upstream source (Mermaid diagram stack) — see below |
-
-> [!IMPORTANT]
-> The root `Cargo.toml` (workspace members, dependency versions, lints,
-> profiles) is **generated** — treat it as read-only. Prefer editing per-crate
-> `Cargo.toml` files.
-
-## Development
-
-```sh
-cargo check -p <crate>        # always target specific crates; full-workspace builds are slow
-cargo test -p xai-grok-config # per-crate tests
-cargo clippy -p <crate>       # lint config: clippy.toml at the repo root
-cargo fmt --all               # rustfmt.toml at the repo root
-```
-
-## Contributing
-
-> [!NOTE]
-> External contributions are not accepted. See [`CONTRIBUTING.md`](CONTRIBUTING.md).
+---
 
 ## License
 
-First-party code in this repository is licensed under the **Apache License,
-Version 2.0** — see [`LICENSE`](LICENSE).
-
-Third-party and vendored code remains under its original licenses. See:
-
-- [`THIRD-PARTY-NOTICES`](THIRD-PARTY-NOTICES) — crates.io / git dependencies,
-  bundled UI themes, and **in-tree source ports** (including openai/codex and
-  sst/opencode tool implementations)
-- [`crates/codegen/xai-grok-tools/THIRD_PARTY_NOTICES.md`](crates/codegen/xai-grok-tools/THIRD_PARTY_NOTICES.md)
-  — crate-local notice for the codex and opencode ports (license texts +
-  Apache §4(b) change notice)
-- [`third_party/NOTICE`](third_party/NOTICE) — vendored Mermaid-stack index
+Distributed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for more details.
