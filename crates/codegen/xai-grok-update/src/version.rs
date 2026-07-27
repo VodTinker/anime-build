@@ -208,19 +208,32 @@ async fn fetch_gh_release_latest(exclude_pre: bool) -> Result<String> {
     cmd.args(&args).stdin(std::process::Stdio::null());
     xai_grok_tools::util::detach_command(&mut cmd);
     cmd.envs(xai_grok_tools::util::pager_env());
-    let output = cmd.output().await?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        anyhow::bail!("gh release list failed: {}", stderr.trim());
-    }
+    let output = match cmd.output().await {
+        Ok(out) if out.status.success() => out,
+        _ => return fetch_github_api_latest().await,
+    };
 
     let tag = String::from_utf8(output.stdout)?.trim().to_string();
     // Tags are formatted as "v0.1.141", strip the leading "v"
     let version = tag.strip_prefix('v').unwrap_or(&tag).to_string();
     if version.is_empty() {
-        anyhow::bail!("No releases found in {}", GH_RELEASE_REPO);
+        return fetch_github_api_latest().await;
     }
+    Ok(version)
+}
+
+async fn fetch_github_api_latest() -> Result<String> {
+    let url = format!("https://api.github.com/repos/{}/releases/latest", GH_RELEASE_REPO);
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(15))
+        .user_agent("anibuild-cli")
+        .build()?;
+    let resp = client.get(&url).send().await?;
+    let json: serde_json::Value = resp.json().await?;
+    let tag = json.get("tag_name")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("tag_name not found in GitHub release API response"))?;
+    let version = tag.strip_prefix('v').unwrap_or(tag).to_string();
     Ok(version)
 }
 
@@ -345,8 +358,7 @@ async fn fetch_gcs_channel_pointer(channel: &str, base_url: &str) -> Result<Stri
 pub async fn fetch_latest_version(installer: &str, config: &UpdateConfig) -> Result<String> {
     match installer {
         "npm" => fetch_npm_version(&config.channel, config.npm_registry.as_deref()).await,
-        "gh-release" => fetch_gh_release_version(&config.channel).await,
-        _ => fetch_gcs_version(&config.channel).await,
+        _ => fetch_gh_release_version(&config.channel).await,
     }
 }
 
