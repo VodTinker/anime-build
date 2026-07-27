@@ -16,7 +16,16 @@ function Get-LatestAnimeVersion {
             return $Matches[1]
         }
     } catch {}
-    return "0.2.201"
+    try {
+        $req = [System.Net.WebRequest]::Create("https://github.com/$ANIME_REPO/releases/latest")
+        $req.AllowAutoRedirect = $false
+        $res = $req.GetResponse()
+        $loc = $res.Headers["Location"]
+        if ($loc -match '/tag/v?(\d+\.\d+\.\d+)') {
+            return $Matches[1]
+        }
+    } catch {}
+    throw "Unable to resolve latest Anime release version from GitHub."
 }
 
 $ANIME_VERSION = if ($env:ANIME_VERSION) { $env:ANIME_VERSION } else { Get-LatestAnimeVersion }

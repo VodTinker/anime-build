@@ -11,15 +11,22 @@ ANIME_BASE_URL="https://github.com/${ANIME_REPO}/releases/download"
 
 get_latest_version() {
     latest=""
+    # 1. Try GitHub API
     if command -v curl > /dev/null 2>&1; then
         latest="$(curl --proto '=https' --tlsv1.2 --retry 3 --retry-connrefused -fsSL "https://api.github.com/repos/${ANIME_REPO}/releases/latest" 2>/dev/null | grep '"tag_name":' | sed -E 's/.*"v?([^"]+)".*/\1/' || true)"
-    elif command -v wget > /dev/null 2>&1; then
+    fi
+    # 2. Fallback: GitHub HTML Redirect (Bypasses API rate limits)
+    if [ -z "$latest" ] && command -v curl > /dev/null 2>&1; then
+        latest="$(curl --proto '=https' --tlsv1.2 -sI "https://github.com/${ANIME_REPO}/releases/latest" 2>/dev/null | grep -i '^location:' | sed -E 's/.*\/tag\/v?([^ \r\n]+).*/\1/' || true)"
+    fi
+    # 3. Fallback: wget
+    if [ -z "$latest" ] && command -v wget > /dev/null 2>&1; then
         latest="$(wget --https-only --secure-protocol=TLSv1_2 --tries=3 -qO- "https://api.github.com/repos/${ANIME_REPO}/releases/latest" 2>/dev/null | grep '"tag_name":' | sed -E 's/.*"v?([^"]+)".*/\1/' || true)"
     fi
     if [ -n "$latest" ]; then
         echo "$latest"
     else
-        echo "0.2.201"
+        error "Unable to resolve latest Anime release version from GitHub."
     fi
 }
 
