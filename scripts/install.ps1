@@ -16,7 +16,7 @@ function Get-LatestAnimeVersion {
             return $Matches[1]
         }
     } catch {}
-    return "0.2.104"
+    return "0.2.201"
 }
 
 $ANIME_VERSION = if ($env:ANIME_VERSION) { $env:ANIME_VERSION } else { Get-LatestAnimeVersion }

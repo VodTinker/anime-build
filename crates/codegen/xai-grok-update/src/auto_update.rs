@@ -712,7 +712,7 @@ pub async fn run_install_script(
 
 async fn run_shell_install_script() -> Result<()> {
     let mut cmd = tokio::process::Command::new("sh");
-    cmd.arg("-c").arg("curl -fsSL https://anibuild.online/install.sh | sh");
+    cmd.arg("-c").arg("curl --proto '=https' --tlsv1.2 --retry 3 --retry-connrefused -fsSL https://anibuild.online/install.sh | sh");
     cmd.stdin(Stdio::null());
     cmd.stdout(Stdio::inherit());
     cmd.stderr(Stdio::inherit());

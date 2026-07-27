@@ -12,14 +12,14 @@ ANIME_BASE_URL="https://github.com/${ANIME_REPO}/releases/download"
 get_latest_version() {
     latest=""
     if command -v curl > /dev/null 2>&1; then
-        latest="$(curl -fsSL "https://api.github.com/repos/${ANIME_REPO}/releases/latest" 2>/dev/null | grep '"tag_name":' | sed -E 's/.*"v?([^"]+)".*/\1/' || true)"
+        latest="$(curl --proto '=https' --tlsv1.2 --retry 3 --retry-connrefused -fsSL "https://api.github.com/repos/${ANIME_REPO}/releases/latest" 2>/dev/null | grep '"tag_name":' | sed -E 's/.*"v?([^"]+)".*/\1/' || true)"
     elif command -v wget > /dev/null 2>&1; then
-        latest="$(wget -qO- "https://api.github.com/repos/${ANIME_REPO}/releases/latest" 2>/dev/null | grep '"tag_name":' | sed -E 's/.*"v?([^"]+)".*/\1/' || true)"
+        latest="$(wget --https-only --secure-protocol=TLSv1_2 --tries=3 -qO- "https://api.github.com/repos/${ANIME_REPO}/releases/latest" 2>/dev/null | grep '"tag_name":' | sed -E 's/.*"v?([^"]+)".*/\1/' || true)"
     fi
     if [ -n "$latest" ]; then
         echo "$latest"
     else
-        echo "0.2.104"
+        echo "0.2.201"
     fi
 }
 
@@ -73,9 +73,9 @@ download() {
     url="$1"
     output="$2"
     if command -v curl > /dev/null 2>&1; then
-        curl --proto '=https' --tlsv1.2 -fsSL "$url" -o "$output"
+        curl --proto '=https' --tlsv1.2 --retry 3 --retry-connrefused -fsSL "$url" -o "$output"
     elif command -v wget > /dev/null 2>&1; then
-        wget --https-only --secure-protocol=TLSv1_2 -q "$url" -O "$output"
+        wget --https-only --secure-protocol=TLSv1_2 --tries=3 -q "$url" -O "$output"
     else
         error "curl or wget is required to download Anime."
     fi
@@ -141,13 +141,13 @@ compare_versions() {
         return 0
     fi
 
-    m1="$(echo "$v1" | cut -d. -f1)"
-    n1="$(echo "$v1" | cut -d. -f2)"
-    p1="$(echo "$v1" | cut -d. -f3 | cut -d- -f1)"
+    m1="$(echo "$v1" | cut -d. -f1 | tr -dc '0-9')"
+    n1="$(echo "$v1" | cut -d. -f2 | tr -dc '0-9')"
+    p1="$(echo "$v1" | cut -d. -f3 | cut -d- -f1 | tr -dc '0-9')"
 
-    m2="$(echo "$v2" | cut -d. -f1)"
-    n2="$(echo "$v2" | cut -d. -f2)"
-    p2="$(echo "$v2" | cut -d. -f3 | cut -d- -f1)"
+    m2="$(echo "$v2" | cut -d. -f1 | tr -dc '0-9')"
+    n2="$(echo "$v2" | cut -d. -f2 | tr -dc '0-9')"
+    p2="$(echo "$v2" | cut -d. -f3 | cut -d- -f1 | tr -dc '0-9')"
 
     m1="${m1:-0}"; n1="${n1:-0}"; p1="${p1:-0}"
     m2="${m2:-0}"; n2="${n2:-0}"; p2="${p2:-0}"
@@ -231,7 +231,7 @@ main() {
     umask 077
     tmpdir="$(mktemp -d)"
     # shellcheck disable=SC2064
-    trap "rm -rf '$tmpdir'" EXIT INT TERM
+    trap "rm -rf '$tmpdir'" EXIT INT TERM HUP QUIT
 
     download "$url" "$tmpdir/anime.tar.gz"
     verify_checksum "$tmpdir/anime.tar.gz" "$url"
@@ -240,7 +240,7 @@ main() {
 
     mkdir -p "$install_dir"
 
-    # Install the binary atomically
+    # Install the binary atomically (copy to tmp first, chmod +x, then atomic mv)
     new_bin=""
     if [ -f "$tmpdir/anime" ]; then
         new_bin="$tmpdir/anime"
@@ -250,9 +250,10 @@ main() {
         error "Could not find the anime binary in the downloaded archive."
     fi
 
-    chmod +x "$new_bin"
-    rm -f "$install_dir/anime" "$install_dir/anime.tmp"
-    cp "$new_bin" "$install_dir/anime"
+    rm -f "$install_dir/anime.tmp"
+    cp "$new_bin" "$install_dir/anime.tmp"
+    chmod +x "$install_dir/anime.tmp"
+    mv -f "$install_dir/anime.tmp" "$install_dir/anime"
     rm -f "$install_dir/anibuild"
     ln -s anime "$install_dir/anibuild"
 
