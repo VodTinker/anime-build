@@ -12,63 +12,86 @@
 
 ## Overview
 
-**Anibuild** is a terminal-native AI agent designed to inspect codebase structure, edit files, and execute shell commands directly from your terminal or CI environment. Built for privacy and performance, Anibuild runs 100% locally with zero telemetry and zero remote code storage.
+**Anibuild** ([anibuild.online](https://anibuild.online)) is a terminal-native AI coding agent designed to inspect codebase structure, edit files, and execute shell commands directly within your terminal, editor, or CI/CD environment. 
+
+Inspired by terminal agent harnesses, Anibuild is engineered for complete privacy: it runs 100% locally with zero telemetry, zero remote code tracking, and direct process visibility.
 
 ---
 
 ## Quick Installation (macOS & Linux)
 
-Install the latest version (`v0.2.201`) via the one-line shell installer:
+Install or upgrade to `v0.2.201` via the official one-liner script:
 
 ```bash
 curl -fsSL https://anibuild.online/install.sh | sh
 ```
 
-*Note: Windows is not natively supported. Use WSL, Linux, or macOS.*
+*Note: Windows is supported via WSL (Windows Subsystem for Linux) or PowerShell (`install.ps1`).*
 
-### Installer Flags
+### Installer Options & Flags
 
 ```bash
-# Force reinstallation / overwrite existing binary
+# Force reinstallation or overwrite existing binaries
 curl -fsSL https://anibuild.online/install.sh | sh -s -- --force
 
-# Dry-run simulation (no disk changes)
+# Perform a dry-run simulation without making disk changes
 curl -fsSL https://anibuild.online/install.sh | sh -s -- --dry-run
 ```
 
 ---
 
-## Key Capabilities
+## Key Features
 
-- **Codebase-Aware**: Maps repository structure, dependencies, and code patterns prior to executing edits.
-- **Flexible Provider Workflows**: Seamlessly authenticate via your **ChatGPT Pro / Plus** subscription or supply custom **API keys** (OpenAI, Anthropic, DeepSeek, Ollama, OpenRouter).
-- **Zero Telemetry**: Fully local process execution. Your code and prompts never leave your local workspace.
-- **Terminal & CI Native**: Runs interactively as a TUI or headlessly inside CI/CD scripts and Agent Client Protocol (ACP) workflows.
-- **Built-in Voice Dictation**: Hands-free interaction directly within the terminal prompt.
+| Feature | Description |
+| :--- | :--- |
+| **Codebase Awareness** | Maps repository structure, symbols, imports, and dependencies prior to proposing edits. |
+| **ChatGPT & API Key Workflows** | Authenticate via your **ChatGPT Pro / Plus** subscription or connect custom API keys. |
+| **Zero Telemetry** | 100% local execution. Prompts, diffs, and code context are never collected or stored. |
+| **Terminal & Headless Modes** | Interactive full-screen TUI, pipe/headless mode for scripts, and Agent Client Protocol (ACP) server. |
+| **Voice Dictation** | Native voice input integration directly within the terminal prompt interface. |
+| **Self-Updater** | Built-in updater command (`anibuild update`) fetching verified releases dynamically from GitHub. |
 
 ---
 
-## Usage
+## Usage Guide
 
-Start the agent:
+### 1. Interactive Mode (TUI)
+
+Launch the full-screen terminal interface:
 
 ```bash
 anibuild
 ```
 
-*(The `anime` binary is also installed for backward compatibility).*
+*(The `anime` command alias is also installed for backward compatibility).*
 
-### Interactive Provider Configuration
+### 2. Provider Setup & Authentication
 
-Configure your model providers, ChatGPT OAuth, or custom API keys:
+Run the interactive setup wizard to configure models, API keys, or ChatGPT OAuth authentication:
 
 ```bash
 anibuild provider
 ```
 
-### Self-Updater
+Supported providers:
+- **ChatGPT Pro / Plus** (OpenAI Codex OAuth)
+- **OpenAI API** (`gpt-4o`, `o1`, `o3-mini`)
+- **Anthropic API** (`claude-3-5-sonnet`, `claude-3-7-sonnet`)
+- **DeepSeek API** (`deepseek-coder`, `deepseek-r1`)
+- **Ollama / Local LLMs** (Self-hosted endpoints)
+- **OpenRouter** & custom OpenAI-compatible endpoints
 
-Update to the latest release at any time:
+### 3. Headless Mode (CLI & CI/CD Pipelines)
+
+Run non-interactively in shell scripts or automated CI runners:
+
+```bash
+anibuild --headless --prompt "Run tests and fix any broken assertions"
+```
+
+### 4. Updating Anibuild
+
+Check and update to the latest release at any time:
 
 ```bash
 anibuild update
@@ -76,18 +99,33 @@ anibuild update
 
 ---
 
+## CLI Command Reference
+
+| Command | Action |
+| :--- | :--- |
+| `anibuild` | Launches the interactive terminal user interface (TUI). |
+| `anibuild provider` | Interactive model provider and authentication manager. |
+| `anibuild update` | Checks GitHub Releases and updates the binary. |
+| `anibuild --version` | Displays compiled version, commit hash, and release channel. |
+| `anibuild --help` | Displays available CLI flags and arguments. |
+
+---
+
 ## Building from Source
 
 ### Prerequisites
 
-- Rust toolchain (`cargo`, `rustc` 1.85+)
-- C compiler (`clang` or `gcc`), `cmake`, and `protobuf-compiler`
+- **Rust toolchain**: `rustc` and `cargo` (v1.85+)
+- **System dependencies**: `clang`, `lld`, `cmake`, and `protobuf-compiler`
 
-### Compilation
+### Compilation Steps
 
 ```bash
+# 1. Clone repository
 git clone https://github.com/VodTinker/anime-build.git
 cd anime-build
+
+# 2. Build release binary
 cargo build -p xai-grok-pager-bin --bin anibuild --release
 ```
 
@@ -95,14 +133,14 @@ The compiled binary will be placed at `target/release/anibuild`.
 
 ---
 
-## Security & Privacy
+## Architecture & Privacy Model
 
-- **Local Execution**: All file operations, command executions, and context builds occur locally.
-- **Zero Telemetry**: Anibuild contains no telemetry instrumentation or tracking metrics.
-- **Direct Process Control**: Commands executed by the agent inherit your shell environment and run under your explicit process permissions.
+- **Local Execution**: All workspace indexing, file modifications, and process executions take place locally on your machine.
+- **Strict Process Scoping**: Shell commands executed by the agent inherit your local environment permissions and are surfaced with full process visibility.
+- **Zero Data Collection**: No telemetry, analytics, or usage metrics are gathered or sent.
 
 ---
 
 ## License
 
-Distributed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for more details.
+Distributed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for full details.
