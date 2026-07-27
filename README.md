@@ -1,146 +1,157 @@
-# ANIBUILD
+# Anime
 
-> **Terminal-native AI coding agent harness**  
-> Codebase-aware, zero-telemetry, local execution with ChatGPT Pro/Plus & custom API key support.
+> **A terminal-native AI coding agent.**
+> Inspect your codebase, edit files, and run commands from your local environment.
 
-![Release Version](https://img.shields.io/badge/version-v0.2.201-blue.svg)
-![License](https://img.shields.io/badge/license-Apache--2.0-green.svg)
-![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-darkgray.svg)
-![Telemetry](https://img.shields.io/badge/telemetry-zero-purple.svg)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-green.svg)](LICENSE)
+[![Rust](https://img.shields.io/badge/Rust-2024-orange?logo=rust)](https://www.rust-lang.org/)
+[![Platforms](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-blue)](#installation)
+[![Telemetry](https://img.shields.io/badge/telemetry-zero-purple.svg)](#privacy)
 
----
+**Anime**—also available as `anibuild`—is a terminal-native AI coding agent. It works directly in your repository: it understands available project context, proposes and applies changes, and runs commands with visibility in your own terminal session.
 
-## Overview
+- **Local workspace operations:** Your files and processes remain on your machine.
+- **Flexible authentication:** ChatGPT Plus/Pro (Codex OAuth), API keys, and compatible providers.
+- **Automation-ready:** An interactive TUI for hands-on work and a single-prompt mode for scripts and CI.
 
-**Anibuild** ([anibuild.online](https://anibuild.online)) is a terminal-native AI coding agent designed to inspect codebase structure, edit files, and execute shell commands directly within your terminal, editor, or CI/CD environment. 
+## Quick start
 
-Inspired by terminal agent harnesses, Anibuild is engineered for complete privacy: it runs 100% locally with zero telemetry, zero remote code tracking, and direct process visibility.
+### Installation
 
----
-
-## Quick Installation (macOS & Linux)
-
-Install or upgrade to `v0.2.201` via the official one-liner script:
+**macOS and Linux**
 
 ```bash
 curl -fsSL https://anibuild.online/install.sh | sh
 ```
 
-*Note: Windows is supported via WSL (Windows Subsystem for Linux) or PowerShell (`install.ps1`).*
+**Windows (PowerShell)**
 
-### Installer Options & Flags
+```powershell
+irm https://anibuild.online/install.ps1 | iex
+```
+
+The installer downloads the latest published release, verifies its SHA-256 checksum when available, and installs `anime` as the primary command. It also creates `anibuild` as a compatibility alias.
+
+> On Linux and macOS, the default install location for non-root users is `~/.local/bin`. If that directory is not on your `PATH`, the installer prints shell-specific instructions.
+
+### Run Anime
+
+Start an interactive session from your project directory:
 
 ```bash
-# Force reinstallation or overwrite existing binaries
+anime
+```
+
+Configure a provider or authentication method:
+
+```bash
+anime provider
+```
+
+Run a single prompt, which is useful in scripts and automation:
+
+```bash
+anime --prompt "Run the test suite and summarize any failures"
+```
+
+## Core commands
+
+| Command | Description |
+| --- | --- |
+| `anime` | Opens the interactive terminal user interface (TUI). |
+| `anime provider` | Configures providers, models, and credentials. |
+| `anime --prompt "…"` | Runs a single prompt and writes output to the terminal. |
+| `anime update` | Checks for and installs the latest published release. |
+| `anime --version` | Prints the installed version. |
+| `anime --help` | Lists all available options. |
+
+`anibuild` is an alias for `anime`; either command works wherever the compatibility alias is installed.
+
+## Providers and authentication
+
+Anime supports **ChatGPT Plus/Pro authentication through OpenAI Codex OAuth**, alongside API keys and provider-specific configurations. The `anime provider` setup assistant can configure:
+
+- OpenRouter.
+- Anthropic.
+- OpenAI.
+- DeepSeek.
+- Ollama for local models.
+- Custom OpenAI-compatible endpoints.
+
+Choose the provider that fits your workflow, and review its policies, pricing, and limits before using it in automated environments.
+
+## Features
+
+| Capability | What it provides |
+| --- | --- |
+| **Codebase context** | Uses available repository structure and context while working on your project. |
+| **File editing and commands** | Modifies files and runs processes with the permissions of your local environment. |
+| **TUI and single-prompt modes** | Switches between an interactive terminal session and one-shot execution for scripts. |
+| **Configurable providers** | Supports OAuth, API keys, local models, and compatible endpoints. |
+| **Built-in updates** | Installs published releases from GitHub Releases. |
+
+## Privacy
+
+Anime performs workspace exploration, file modifications, and command execution on your machine. The project does not include first-party usage telemetry.
+
+When you select a remote provider, requests required to generate responses are sent to that provider. Do not include secrets, personal data, or sensitive code in requests to external services without first understanding their data-handling policies.
+
+## Installer options
+
+On macOS and Linux, you can reinstall Anime or simulate an installation without changing your system:
+
+```bash
+# Reinstall even if the current version is already installed
 curl -fsSL https://anibuild.online/install.sh | sh -s -- --force
 
-# Perform a dry-run simulation without making disk changes
+# Print the version, URL, and target path without changing anything
 curl -fsSL https://anibuild.online/install.sh | sh -s -- --dry-run
 ```
 
----
-
-## Key Features
-
-| Feature | Description |
-| :--- | :--- |
-| **Codebase Awareness** | Maps repository structure, symbols, imports, and dependencies prior to proposing edits. |
-| **ChatGPT & API Key Workflows** | Authenticate via your **ChatGPT Pro / Plus** subscription or connect custom API keys. |
-| **Zero Telemetry** | 100% local execution. Prompts, diffs, and code context are never collected or stored. |
-| **Terminal & Headless Modes** | Interactive full-screen TUI, pipe/headless mode for scripts, and Agent Client Protocol (ACP) server. |
-| **Voice Dictation** | Native voice input integration directly within the terminal prompt interface. |
-| **Self-Updater** | Built-in updater command (`anibuild update`) fetching verified releases dynamically from GitHub. |
-
----
-
-## Usage Guide
-
-### 1. Interactive Mode (TUI)
-
-Launch the full-screen terminal interface:
+You can also select a specific destination directory or release version:
 
 ```bash
-anibuild
+ANIME_INSTALL_DIR="$HOME/.local/bin" ANIME_VERSION="0.2.201" \
+  curl -fsSL https://anibuild.online/install.sh | sh
 ```
 
-*(The `anime` command alias is also installed for backward compatibility).*
+## Build from source
 
-### 2. Provider Setup & Authentication
+### Requirements
 
-Run the interactive setup wizard to configure models, API keys, or ChatGPT OAuth authentication:
+- Rust with `rustc` and `cargo` version 1.85 or later.
+- `clang`, `lld`, `cmake`, and `protobuf-compiler`.
+- Git.
 
-```bash
-anibuild provider
-```
-
-Supported providers:
-- **ChatGPT Pro / Plus** (OpenAI Codex OAuth)
-- **OpenAI API** (`gpt-4o`, `o1`, `o3-mini`)
-- **Anthropic API** (`claude-3-5-sonnet`, `claude-3-7-sonnet`)
-- **DeepSeek API** (`deepseek-coder`, `deepseek-r1`)
-- **Ollama / Local LLMs** (Self-hosted endpoints)
-- **OpenRouter** & custom OpenAI-compatible endpoints
-
-### 3. Headless Mode (CLI & CI/CD Pipelines)
-
-Run non-interactively in shell scripts or automated CI runners:
+### Compile and run
 
 ```bash
-anibuild --headless --prompt "Run tests and fix any broken assertions"
-```
-
-### 4. Updating Anibuild
-
-Check and update to the latest release at any time:
-
-```bash
-anibuild update
-```
-
----
-
-## CLI Command Reference
-
-| Command | Action |
-| :--- | :--- |
-| `anibuild` | Launches the interactive terminal user interface (TUI). |
-| `anibuild provider` | Interactive model provider and authentication manager. |
-| `anibuild update` | Checks GitHub Releases and updates the binary. |
-| `anibuild --version` | Displays compiled version, commit hash, and release channel. |
-| `anibuild --help` | Displays available CLI flags and arguments. |
-
----
-
-## Building from Source
-
-### Prerequisites
-
-- **Rust toolchain**: `rustc` and `cargo` (v1.85+)
-- **System dependencies**: `clang`, `lld`, `cmake`, and `protobuf-compiler`
-
-### Compilation Steps
-
-```bash
-# 1. Clone repository
+# Clone the repository
 git clone https://github.com/VodTinker/anime-build.git
 cd anime-build
 
-# 2. Build release binary
-cargo build -p xai-grok-pager-bin --bin anibuild --release
+# Build the distribution binary
+cargo build -p xai-grok-pager-bin --bin anime --release
+
+# Run it from the working tree
+./target/release/anime
 ```
 
-The compiled binary will be placed at `target/release/anibuild`.
+The compiled binary is written to `target/release/anime`.
 
----
+### Workspace structure
 
-## Architecture & Privacy Model
+This repository is a Rust workspace, with crates under `crates/`. [`xai-grok-pager-bin`](crates/codegen/xai-grok-pager-bin) is the binary composition crate; supporting crates provide terminal UI, configuration, authentication, tools, updates, and shared functionality.
 
-- **Local Execution**: All workspace indexing, file modifications, and process executions take place locally on your machine.
-- **Strict Process Scoping**: Shell commands executed by the agent inherit your local environment permissions and are surfaced with full process visibility.
-- **Zero Data Collection**: No telemetry, analytics, or usage metrics are gathered or sent.
+## Project and support
 
----
+- [Changelog](CHANGELOG.md)
+- [Security policy](SECURITY.md)
+- [Contribution policy](CONTRIBUTING.md)
+- [Apache-2.0 license](LICENSE)
+
+The public source tree is provided for source transparency and local builds. Review [CONTRIBUTING.md](CONTRIBUTING.md) before submitting changes: external pull requests and unsolicited patches are not currently accepted.
 
 ## License
 
-Distributed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for full details.
+Anime is distributed under the [Apache License, Version 2.0](LICENSE).
