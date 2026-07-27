@@ -251,8 +251,8 @@ main() {
     fi
 
     chmod +x "$new_bin"
-    cp "$new_bin" "$install_dir/anime.tmp"
-    mv -f "$install_dir/anime.tmp" "$install_dir/anime"
+    rm -f "$install_dir/anime" "$install_dir/anime.tmp"
+    cp "$new_bin" "$install_dir/anime"
     rm -f "$install_dir/anibuild"
     ln -s anime "$install_dir/anibuild"
 
