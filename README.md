@@ -1,18 +1,20 @@
-# Anime
+# Anibuild
 
 > **A terminal-native AI coding agent.**
 > Inspect your codebase, edit files, and run commands from your local environment.
 
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-green.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/Rust-2024-orange?logo=rust)](https://www.rust-lang.org/)
-[![Platforms](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-blue)](#installation)
+[![Platforms](https://img.shields.io/badge/platform-Linux%20%7C%20macOS-blue)](#installation)
 [![Telemetry](https://img.shields.io/badge/telemetry-zero-purple.svg)](#privacy)
 
-**Anime**—also available as `anibuild`—is a terminal-native AI coding agent. It works directly in your repository: it understands available project context, proposes and applies changes, and runs commands with visibility in your own terminal session.
+**Anibuild** is a terminal-native AI coding agent. It works directly in your repository: it understands available project context, proposes and applies changes, and runs commands with visibility in your own terminal session.
 
 - **Local workspace operations:** Your files and processes remain on your machine.
 - **Flexible authentication:** ChatGPT Plus/Pro (Codex OAuth), API keys, and compatible providers.
 - **Automation-ready:** An interactive TUI for hands-on work and a single-prompt mode for scripts and CI.
+
+`anibuild` is the public command name. The distributed binary is currently named `anime` for compatibility, so the installer creates `anibuild` as its command alias.
 
 ## Quick start
 
@@ -24,52 +26,48 @@
 curl -fsSL https://anibuild.online/install.sh | sh
 ```
 
-**Windows (PowerShell)**
+> **Windows is not supported.**
 
-```powershell
-irm https://anibuild.online/install.ps1 | iex
-```
-
-The installer downloads the latest published release, verifies its SHA-256 checksum when available, and installs `anime` as the primary command. It also creates `anibuild` as a compatibility alias.
+The installer downloads the latest published release, verifies its SHA-256 checksum when available, and installs the distributed `anime` binary with `anibuild` as its command alias.
 
 > On Linux and macOS, the default install location for non-root users is `~/.local/bin`. If that directory is not on your `PATH`, the installer prints shell-specific instructions.
 
-### Run Anime
+### Run Anibuild
 
 Start an interactive session from your project directory:
 
 ```bash
-anime
+anibuild
 ```
 
 Configure a provider or authentication method:
 
 ```bash
-anime provider
+anibuild provider
 ```
 
 Run a single prompt, which is useful in scripts and automation:
 
 ```bash
-anime --prompt "Run the test suite and summarize any failures"
+anibuild --prompt "Run the test suite and summarize any failures"
 ```
 
 ## Core commands
 
 | Command | Description |
 | --- | --- |
-| `anime` | Opens the interactive terminal user interface (TUI). |
-| `anime provider` | Configures providers, models, and credentials. |
-| `anime --prompt "…"` | Runs a single prompt and writes output to the terminal. |
-| `anime update` | Checks for and installs the latest published release. |
-| `anime --version` | Prints the installed version. |
-| `anime --help` | Lists all available options. |
+| `anibuild` | Opens the interactive terminal user interface (TUI). |
+| `anibuild provider` | Configures providers, models, and credentials. |
+| `anibuild --prompt "…"` | Runs a single prompt and writes output to the terminal. |
+| `anibuild update` | Checks for and installs the latest published release. |
+| `anibuild --version` | Prints the installed version. |
+| `anibuild --help` | Lists all available options. |
 
-`anibuild` is an alias for `anime`; either command works wherever the compatibility alias is installed.
+The installer provides `anibuild` as the public command and currently distributes `anime` as the underlying binary for compatibility.
 
 ## Providers and authentication
 
-Anime supports **ChatGPT Plus/Pro authentication through OpenAI Codex OAuth**, alongside API keys and provider-specific configurations. The `anime provider` setup assistant can configure:
+Anibuild supports **ChatGPT Plus/Pro authentication through OpenAI Codex OAuth**, alongside API keys and provider-specific configurations. The `anibuild provider` setup assistant can configure:
 
 - OpenRouter.
 - Anthropic.
@@ -92,13 +90,13 @@ Choose the provider that fits your workflow, and review its policies, pricing, a
 
 ## Privacy
 
-Anime performs workspace exploration, file modifications, and command execution on your machine. The project does not include first-party usage telemetry.
+Anibuild performs workspace exploration, file modifications, and command execution on your machine. The project does not include first-party usage telemetry.
 
 When you select a remote provider, requests required to generate responses are sent to that provider. Do not include secrets, personal data, or sensitive code in requests to external services without first understanding their data-handling policies.
 
 ## Installer options
 
-On macOS and Linux, you can reinstall Anime or simulate an installation without changing your system:
+On macOS and Linux, you can reinstall Anibuild or simulate an installation without changing your system:
 
 ```bash
 # Reinstall even if the current version is already installed
@@ -154,4 +152,4 @@ The public source tree is provided for source transparency and local builds. Rev
 
 ## License
 
-Anime is distributed under the [Apache License, Version 2.0](LICENSE).
+Anibuild is distributed under the [Apache License, Version 2.0](LICENSE).
